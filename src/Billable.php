@@ -16,6 +16,14 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 trait Billable
 {
+        
+    public function setAuthorizeAccount() {
+        if(empty($this->site_id)) {
+          throw new \Exception(' Customers need a Site');   
+        }
+    }
+    
+    
     /**
      * Make a "one off" charge on the customer for the given amount.
      *
@@ -30,7 +38,7 @@ trait Billable
         $options = array_merge([
             'currency' => $this->preferredCurrency(),
         ], $options);
-
+        
         $requestor = new Requestor();
 
         $profileToCharge = new AnetAPI\CustomerProfilePaymentType();
@@ -472,24 +480,22 @@ trait Billable
     }
 
     /**
-     * Create a Stripe customer for the given user.
+     * Create a Authorize customer for the given user.
      *
      * @param  array $creditCardDetails
-     * @return StripeCustomer
+     * @return AuthorizeCustomer
      */
     public function createAsAuthorizeCustomer($creditCardDetails)
     {
         $creditCard = new AnetAPI\CreditCardType();
         $creditCard->setCardNumber($creditCardDetails['number']);
-        $creditCard->setExpirationDate($creditCardDetails['experation']);
+        $creditCard->setExpirationDate($creditCardDetails['expiration']);
         $paymentCreditCard = new AnetAPI\PaymentType();
         $paymentCreditCard->setCreditCard($creditCard);
 
-        $name = explode(' ', $this->name);
-
         $billto = new AnetAPI\CustomerAddressType();
-        $billto->setFirstName($name[0]);
-        $billto->setLastName($name[1]);
+        $billto->setFirstName($this->first_name);
+        $billto->setLastName($this->last_name);
         $billto->setAddress($this->address);
         $billto->setCity($this->city);
         $billto->setState($this->state);
@@ -521,7 +527,9 @@ trait Billable
             $this->card_last_four = substr($creditCardDetails['number'], -4);
             $this->save();
         } else {
+            
             $errorMessages = $response->getMessages()->getMessage();
+            var_dump($errorMessages); die();
             Log::error("Authorize.net Response : " . $errorMessages[0]->getCode() . "  " .$errorMessages[0]->getText());
         }
 

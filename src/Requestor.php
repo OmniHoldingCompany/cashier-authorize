@@ -25,13 +25,14 @@ class Requestor
         $merchantAuthentication = new AnetAPI\MerchantAuthenticationType();
         $merchantAuthentication->setName(getenv('ADN_API_LOGIN_ID'));
         $merchantAuthentication->setTransactionKey(getenv('ADN_TRANSACTION_KEY'));
-
+        
+        
         $env = strtoupper(getenv('ADN_ENV'));
 
         if ($env === '') {
             $env = 'SANDBOX';
         }
-
+       
         $this->env = constant("net\authorize\api\constants\ANetEnvironment::$env");
 
         $refId = 'ref' . time();
