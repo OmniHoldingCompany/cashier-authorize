@@ -16,24 +16,273 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 trait Billable
 {
-        
+    /**
+     * Determine if the entity has a Stripe customer ID.
+     *
+     * @return bool
+     */
+    public function hasAuthorizeId()
+    {
+        return ! is_null($this->authorize_id);
+    }
+    
     public function setAuthorizeAccount() {
         if(empty($this->site_id)) {
           throw new \Exception(' Customers need a Site');   
         }
     }
     
+    protected function getMerchantAuthentication() {
+       
+        $this->setAuthorizeAccount();
+        
+        
+        /* Create a merchantAuthenticationType object with authentication details
+         retrieved from the constants file */
+        $merchantAuthentication = new AnetAPI\MerchantAuthenticationType();
+        $merchantAuthentication->setName(getenv('ADN_API_LOGIN_ID'));
+        $merchantAuthentication->setTransactionKey(getenv('ADN_TRANSACTION_KEY'));
+        
+        return $merchantAuthentication;
+    }
+    
+    /**
+     * Create a Authorize customer for the given user.
+     *
+     * @param  array $creditCardDetails
+     * @return AuthorizeCustomer
+     */
+    public function createAsAuthorizeCustomer($creditCardDetails)
+    {
+        $creditCard = new AnetAPI\CreditCardType();
+        $creditCard->setCardNumber($paymentInformation['number']);
+        $creditCard->setExpirationDate($paymentInformation['expiration']);
+        if(!empty($paymentInformation['cvv'])) {
+            $creditCard->setCardCode($paymentInformation['cvv']);
+        }
+        $paymentCreditCard = new AnetAPI\PaymentType();
+        $paymentCreditCard->setCreditCard($creditCard);
+        
+        //TODO we most likely need to be able to pass in the billing
+        $billto = new AnetAPI\CustomerAddressType();
+        $billto->setFirstName($this->first_name);
+        $billto->setLastName($this->last_name);
+        $billto->setAddress($this->address);
+        $billto->setCity($this->city);
+        $billto->setState($this->state);
+        $billto->setZip($this->zip);
+        $billto->setCountry($this->country);
+    
+        $paymentprofile = new AnetAPI\CustomerPaymentProfileType();
+        $paymentprofile->setCustomerType('individual');
+        $paymentprofile->setBillTo($billto);
+        $paymentprofile->setPayment($paymentCreditCard);
+    
+        $customerprofile = new AnetAPI\CustomerProfileType();
+        $customerprofile->setMerchantCustomerId("M_".$this->id);
+        $customerprofile->setEmail($this->email);
+        $customerprofile->setPaymentProfiles([$paymentprofile]);
+    
+        $requestor = new Requestor();
+        $request = $requestor->prepare(new AnetAPI\CreateCustomerProfileRequest());
+        $request->setProfile($customerprofile);
+        
+        
+        $controller = new AnetController\CreateCustomerProfileController($request);
+    
+        $response = $controller->executeWithApiResponse($requestor->env);
+    
+        if (($response != null) && ($response->getMessages()->getResultCode() === "Ok") ) {
+            $this->authorize_id = $response->getCustomerProfileId();
+            $this->authorize_payment_id = $response->getCustomerPaymentProfileIdList()[0];
+            $this->save();
+        } else {
+    
+            $errorMessages = $response->getMessages()->getMessage();
+            var_dump($errorMessages); die();
+            Log::error("Authorize.net Response : " . $errorMessages[0]->getCode() . "  " .$errorMessages[0]->getText());
+        }
+    
+        return $this;
+    }
+         
+    
+        public function  addPaymentMethodToCustomer($paymentInformation, $options = []) {
+        
+            
+            $merchantAuthentication = $this->getMerchantAuthentication();
+            // Set the transaction's refId
+            $refId = 'ref' . time();
+            
+         
+            $creditCard = new AnetAPI\CreditCardType();
+            $creditCard->setCardNumber($paymentInformation['number']);
+            $creditCard->setExpirationDate($paymentInformation['expiration']);
+            if(!empty($paymentInformation['cvv'])) {
+                $creditCard->setCardCode($paymentInformation['cvv']);
+            }
+            $paymentCreditCard = new AnetAPI\PaymentType();
+            $paymentCreditCard->setCreditCard($creditCard);
+            
+           
+            
+            $billto = new AnetAPI\CustomerAddressType();
+            $billto->setFirstName($this->first_name);
+            $billto->setLastName($this->last_name);
+            $billto->setAddress($this->address);
+            $billto->setCity($this->city);
+            $billto->setState($this->state);
+            $billto->setZip($this->zip);
+            $billto->setCountry($this->country);
+            
+            // Create a new Customer Payment Profile object
+            $paymentprofile = new AnetAPI\CustomerPaymentProfileType();
+            $paymentprofile->setCustomerType('individual');
+            $paymentprofile->setBillTo($billto);
+            $paymentprofile->setPayment($paymentCreditCard);
+            $paymentprofile->setDefaultPaymentProfile(true);
+            
+            $paymentprofiles[] = $paymentprofile;
+            
+            // Assemble the complete transaction request
+            $paymentprofilerequest = new AnetAPI\CreateCustomerPaymentProfileRequest();
+            $paymentprofilerequest->setMerchantAuthentication($merchantAuthentication);
+            
+            // Add an existing profile id to the request
+            $paymentprofilerequest->setCustomerProfileId($this->authorize_id);
+            $paymentprofilerequest->setPaymentProfile($paymentprofile);
+            //$paymentprofilerequest->setValidationMode("liveMode");
+            
+            // Create the controller and get the response
+            $controller = new AnetController\CreateCustomerPaymentProfileController($paymentprofilerequest);
+            $response = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
+            
+            if (($response != null) && ($response->getMessages()->getResultCode() == "Ok") ) {
+                echo "Create Customer Payment Profile SUCCESS: " . $response->getCustomerPaymentProfileId() . "\n";
+            } else {
+                echo "Create Customer Payment Profile: ERROR Invalid response\n";
+                $errorMessages = $response->getMessages()->getMessage();
+                echo "Response : " . $errorMessages[0]->getCode() . "  " .$errorMessages[0]->getText() . "\n";
+            
+            }
+            return $response;
+        
+        }
+
+      
+    public function getCustomerProfile() {
+        
+        $merchantAuthentication = $this->getMerchantAuthentication();
+        // Set the transaction's refId
+        $refId = 'ref' . time();
+        
+        $request = new AnetAPI\GetCustomerProfileRequest();
+        $request->setMerchantAuthentication($merchantAuthentication);
+        $request->setCustomerProfileId($this->authorize_id);
+        $controller = new AnetController\GetCustomerProfileController($request);
+        
+        $response = $controller->executeWithApiResponse( \net\authorize\api\constants\ANetEnvironment::SANDBOX);
+        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok") )
+        {
+            $profileSelected = $response->getProfile();
+            return $profileSelected;
+        }
+        else
+        {
+            throw new \Exception( $response->getMessages()->getMessage());
+              }
+        return $response;
+    }
+    
+    public function getCustomerPaymentProfiles() {
+    
+        $profile = $this->getCustomerProfile();
+        
+        $payments = $profile->getPaymentProfiles();
+       
+        return $payments;
+    }
+    
+    public function getCustomerPaymentMethodsClean() {
+    
+        $paymentprofiles = $this->getCustomerPaymentProfiles();
+        
+        $paymentMethods = [];
+        foreach($paymentprofiles as $profile) {
+            $paymentMethod = [];
+            $paymentMethod['profileId'] = $profile->getCustomerPaymentProfileId();
+            $card = $profile->getPayment()->getCreditCard();
+            $paymentMethod['cardNumber'] = $card->getCardNumber();
+            $paymentMethod['expirationDate'] = $card->getExpirationDate();
+            $paymentMethod['type'] = $card->getCardType();
+            $paymentMethods[] = $paymentMethod;
+        }
+        
+        return $paymentMethods;
+    }
+    
+   
+    
+    
+    public function deleteCustomerPaymentProfile($customerpaymentprofileid) {
+        $merchantAuthentication = $this->getMerchantAuthentication();
+        // Set the transaction's refId
+        $refId = 'ref' . time();
+        
+        // Use an existing payment profile ID for this Merchant name and Transaction key
+         
+        $request = new AnetAPI\DeleteCustomerPaymentProfileRequest();
+        $request->setMerchantAuthentication($merchantAuthentication);
+        $request->setCustomerProfileId($this->authorize_id);
+        $request->setCustomerPaymentProfileId($customerpaymentprofileid);
+        $controller = new AnetController\DeleteCustomerPaymentProfileController($request);
+        $response = $controller->executeWithApiResponse( \net\authorize\api\constants\ANetEnvironment::SANDBOX);
+        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok") )
+        {
+            return $this;
+        }
+        else
+        {
+            $errorMessages = $response->getMessages()->getMessage();
+            throw new \Exception($errorMessages[0]->getText(),$errorMessages[0]->getCode());
+        }
+        
+    }
+        
+    /**
+     * Delete an Authorize.net Profile
+     *
+     * @return
+     */
+    public function deleteAuthorizeProfile()
+    {
+        $requestor = new Requestor();
+        $request = $requestor->prepare((new AnetAPI\DeleteCustomerProfileRequest()));
+        $request->setCustomerProfileId($this->authorize_id);
+    
+        $controller = new AnetController\DeleteCustomerProfileController($request);
+        $response = $controller->executeWithApiResponse($requestor->env);
+    
+        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok") ) {
+            return true;
+        } else {
+            $errorMessages = $response->getMessages()->getMessage();
+            throw new Exception("Response : " . $errorMessages[0]->getCode() . "  " .$errorMessages[0]->getText(), 1);
+        }
+    
+        return false;
+    }
+   
     
     /**
      * Make a "one off" charge on the customer for the given amount.
      *
      * @param  int  $amount
+     * @param  int  $profile_id
      * @param  array  $options
-     * @return \Stripe\Charge
-     *
-     * @throws \Stripe\Error\Card
+
      */
-    public function charge($amount, array $options = [])
+    public function charge($amount, $profile_id,  array $options = [])
     {
         $options = array_merge([
             'currency' => $this->preferredCurrency(),
@@ -44,7 +293,7 @@ trait Billable
         $profileToCharge = new AnetAPI\CustomerProfilePaymentType();
         $profileToCharge->setCustomerProfileId($this->authorize_id);
         $paymentProfile = new AnetAPI\PaymentProfileType();
-        $paymentProfile->setPaymentProfileId($this->authorize_payment_id);
+        $paymentProfile->setPaymentProfileId($profile_id);
         $profileToCharge->setPaymentProfile($paymentProfile);
 
         $amountWithTax = round(floatval($amount) * floatval('1.'.$this->taxPercentage()), 2);
@@ -89,7 +338,7 @@ trait Billable
      */
     public function hasCardOnFile()
     {
-        return (bool) $this->card_brand;
+        return (bool) count($this->getCustomerPaymentProfiles());
     }
 
     /**
@@ -379,60 +628,6 @@ trait Billable
     }
 
     /**
-     * Update customer's credit card.
-     *
-     * @param  string  $token
-     * @return void
-     */
-    public function updateCard($card)
-    {
-        $requestor = new Requestor();
-        $request = $requestor->prepare(new AnetAPI\UpdateCustomerPaymentProfileRequest());
-        $request->setCustomerProfileId($this->authorize_id);
-        $controller = new AnetController\GetCustomerProfileController($request);
-
-        // We're updating the billing address but everything has to be passed in an update
-        // For card information you can pass exactly what comes back from an GetCustomerPaymentProfile
-        // if you don't need to update that info
-        $creditCard = new AnetAPI\CreditCardType();
-        $creditCard->setCardNumber($card['number']);
-        $creditCard->setExpirationDate($card['experation']);
-        $paymentCreditCard = new AnetAPI\PaymentType();
-        $paymentCreditCard->setCreditCard($creditCard);
-
-        // Create the Bill To info for new payment type
-        $name = explode(' ', $this->name);
-        $billto = new AnetAPI\CustomerAddressType();
-        $billto->setFirstName($name[0]);
-        $billto->setLastName($name[1]);
-        $billto->setAddress($this->address);
-        $billto->setCity($this->city);
-        $billto->setState($this->state);
-        $billto->setZip($this->zip);
-        $billto->setCountry($this->country);
-
-        // Create the Customer Payment Profile object
-        $paymentprofile = new AnetAPI\CustomerPaymentProfileExType();
-        $paymentprofile->setCustomerPaymentProfileId($this->authorize_payment_id);
-        $paymentprofile->setBillTo($billto);
-        $paymentprofile->setPayment($paymentCreditCard);
-
-        // Submit a UpdatePaymentProfileRequest
-        $request->setPaymentProfile($paymentprofile);
-
-        $controller = new AnetController\UpdateCustomerPaymentProfileController($request);
-        $response = $controller->executeWithApiResponse($requestor->env);
-        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok")) {
-            $this->card_brand = $this->cardBrandDetector($card['number']);
-            $this->card_last_four = substr($card['number'], -4);
-        } else {
-            throw new Exception("Response : " . $errorMessages[0]->getCode() . "  " .$errorMessages[0]->getText(), 1);
-        }
-
-        return $this->save();
-    }
-
-    /**
      * Determine if the user is actively subscribed to one of the given plans.
      *
      * @param  array|string  $plans
@@ -469,96 +664,9 @@ trait Billable
         }));
     }
 
-    /**
-     * Determine if the entity has a Stripe customer ID.
-     *
-     * @return bool
-     */
-    public function hasAuthorizeId()
-    {
-        return ! is_null($this->authorize_id);
-    }
+   
 
-    /**
-     * Create a Authorize customer for the given user.
-     *
-     * @param  array $creditCardDetails
-     * @return AuthorizeCustomer
-     */
-    public function createAsAuthorizeCustomer($creditCardDetails)
-    {
-        $creditCard = new AnetAPI\CreditCardType();
-        $creditCard->setCardNumber($creditCardDetails['number']);
-        $creditCard->setExpirationDate($creditCardDetails['expiration']);
-        $paymentCreditCard = new AnetAPI\PaymentType();
-        $paymentCreditCard->setCreditCard($creditCard);
-
-        $billto = new AnetAPI\CustomerAddressType();
-        $billto->setFirstName($this->first_name);
-        $billto->setLastName($this->last_name);
-        $billto->setAddress($this->address);
-        $billto->setCity($this->city);
-        $billto->setState($this->state);
-        $billto->setZip($this->zip);
-        $billto->setCountry($this->country);
-
-        $paymentprofile = new AnetAPI\CustomerPaymentProfileType();
-        $paymentprofile->setCustomerType('individual');
-        $paymentprofile->setBillTo($billto);
-        $paymentprofile->setPayment($paymentCreditCard);
-
-        $customerprofile = new AnetAPI\CustomerProfileType();
-        $customerprofile->setMerchantCustomerId("M_".$this->id);
-        $customerprofile->setEmail($this->email);
-        $customerprofile->setPaymentProfiles([$paymentprofile]);
-
-        $requestor = new Requestor();
-        $request = $requestor->prepare(new AnetAPI\CreateCustomerProfileRequest());
-        $request->setProfile($customerprofile);
-
-        $controller = new AnetController\CreateCustomerProfileController($request);
-
-        $response = $controller->executeWithApiResponse($requestor->env);
-
-        if (($response != null) && ($response->getMessages()->getResultCode() === "Ok") ) {
-            $this->authorize_id = $response->getCustomerProfileId();
-            $this->authorize_payment_id = $response->getCustomerPaymentProfileIdList()[0];
-            $this->card_brand = $this->cardBrandDetector($creditCardDetails['number']);
-            $this->card_last_four = substr($creditCardDetails['number'], -4);
-            $this->save();
-        } else {
-            
-            $errorMessages = $response->getMessages()->getMessage();
-            var_dump($errorMessages); die();
-            Log::error("Authorize.net Response : " . $errorMessages[0]->getCode() . "  " .$errorMessages[0]->getText());
-        }
-
-        return $this;
-    }
-
-    /**
-     * Delete an Authorize.net Profile
-     *
-     * @return
-     */
-    public function deleteAuthorizeProfile()
-    {
-        $requestor = new Requestor();
-        $request = $requestor->prepare((new AnetAPI\DeleteCustomerProfileRequest()));
-        $request->setCustomerProfileId($this->authorize_id);
-
-        $controller = new AnetController\DeleteCustomerProfileController($request);
-        $response = $controller->executeWithApiResponse($requestor->env);
-
-        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok") ) {
-            return true;
-        } else {
-            $errorMessages = $response->getMessages()->getMessage();
-            throw new Exception("Response : " . $errorMessages[0]->getCode() . "  " .$errorMessages[0]->getText(), 1);
-        }
-
-        return false;
-    }
+   
 
     /**
      * Get the Stripe supported currency used by the entity.
