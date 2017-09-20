@@ -3,6 +3,10 @@
 namespace Laravel\CashierAuthorizeNet;
 
 use Exception;
+use Money\Money;
+use Money\Currencies\ISOCurrencies;
+use Money\Currency;
+use Money\Formatter\DecimalMoneyFormatter;
 use Carbon\Carbon;
 use InvalidArgumentException;
 use Illuminate\Support\Collection;
@@ -46,14 +50,42 @@ trait Billable
         return $merchantAuthentication;
     }
     
+    protected function getBillingObject($data=[]) {
+         
+        
+        $billto = new AnetAPI\CustomerAddressType();
+        if(!empty($data['first_name'])) {
+            $billto->setFirstName($data['first_name']);
+            $billto->setLastName($data['last_name']);
+            $billto->setAddress($data['address_1']);
+            $billto->setCity($data['city']);
+            $billto->setState($data['state']);
+            $billto->setZip($data['zip']);
+            $billto->setCountry($data['country']);
+        } else {
+            $billto->setFirstName($this->first_name);
+            $billto->setLastName($this->last_name);
+            $billto->setAddress($this->address_1);
+            $billto->setCity($this->city);
+            $billto->setState($this->state);
+            $billto->setZip($this->zip);
+            $billto->setCountry($this->country);
+        }
+        
+       
+        
+        return $billto;
+    }
     /**
      * Create a Authorize customer for the given user.
      *
      * @param  array $creditCardDetails
      * @return AuthorizeCustomer
      */
-    public function createAsAuthorizeCustomer($creditCardDetails)
+    public function createAsAuthorizeCustomer($paymentInformation, $options = [])
     {
+        $this->setAuthorizeAccount();
+        
         $creditCard = new AnetAPI\CreditCardType();
         $creditCard->setCardNumber($paymentInformation['number']);
         $creditCard->setExpirationDate($paymentInformation['expiration']);
@@ -64,14 +96,7 @@ trait Billable
         $paymentCreditCard->setCreditCard($creditCard);
         
         //TODO we most likely need to be able to pass in the billing
-        $billto = new AnetAPI\CustomerAddressType();
-        $billto->setFirstName($this->first_name);
-        $billto->setLastName($this->last_name);
-        $billto->setAddress($this->address);
-        $billto->setCity($this->city);
-        $billto->setState($this->state);
-        $billto->setZip($this->zip);
-        $billto->setCountry($this->country);
+        $billto = $this->getBillingObject($options);
     
         $paymentprofile = new AnetAPI\CustomerPaymentProfileType();
         $paymentprofile->setCustomerType('individual');
@@ -96,14 +121,22 @@ trait Billable
             $this->authorize_id = $response->getCustomerProfileId();
             $this->authorize_payment_id = $response->getCustomerPaymentProfileIdList()[0];
             $this->save();
+            
         } else {
     
             $errorMessages = $response->getMessages()->getMessage();
-            var_dump($errorMessages); die();
-            Log::error("Authorize.net Response : " . $errorMessages[0]->getCode() . "  " .$errorMessages[0]->getText());
+          
+          //THIS THIS CUSTOMER ALREADY EXISTS FOR SOME REASON INSTEAD OF FAILING LETS RECOVER
+          if(strpos(strtolower($errorMessages[0]->getText()), 'a duplicate record with id') !== false) {
+             $this->authorize_id =  preg_replace('/\D+/', '', $errorMessages[0]->getText());
+             $this->save(); 
+             
+            return $this->addPaymentMethodToCustomer($paymentInformation, $options);
+          }
+          
         }
     
-        return $this;
+        return $this->authorize_payment_id;
     }
          
     
@@ -124,16 +157,7 @@ trait Billable
             $paymentCreditCard = new AnetAPI\PaymentType();
             $paymentCreditCard->setCreditCard($creditCard);
             
-           
-            
-            $billto = new AnetAPI\CustomerAddressType();
-            $billto->setFirstName($this->first_name);
-            $billto->setLastName($this->last_name);
-            $billto->setAddress($this->address);
-            $billto->setCity($this->city);
-            $billto->setState($this->state);
-            $billto->setZip($this->zip);
-            $billto->setCountry($this->country);
+            $billto = $this->getBillingObject($options);
             
             // Create a new Customer Payment Profile object
             $paymentprofile = new AnetAPI\CustomerPaymentProfileType();
@@ -158,12 +182,10 @@ trait Billable
             $response = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
             
             if (($response != null) && ($response->getMessages()->getResultCode() == "Ok") ) {
-                echo "Create Customer Payment Profile SUCCESS: " . $response->getCustomerPaymentProfileId() . "\n";
+                return $response->getCustomerPaymentProfileId();
             } else {
-                echo "Create Customer Payment Profile: ERROR Invalid response\n";
                 $errorMessages = $response->getMessages()->getMessage();
-                echo "Response : " . $errorMessages[0]->getCode() . "  " .$errorMessages[0]->getText() . "\n";
-            
+                throw new \Exception($errorMessages[0]->getText());            
             }
             return $response;
         
@@ -210,7 +232,7 @@ trait Billable
         $paymentMethods = [];
         foreach($paymentprofiles as $profile) {
             $paymentMethod = [];
-            $paymentMethod['profileId'] = $profile->getCustomerPaymentProfileId();
+            $paymentMethod['payment_profile_id'] = $profile->getCustomerPaymentProfileId();
             $card = $profile->getPayment()->getCreditCard();
             $paymentMethod['cardNumber'] = $card->getCardNumber();
             $paymentMethod['expirationDate'] = $card->getExpirationDate();
@@ -284,6 +306,8 @@ trait Billable
      */
     public function charge($amount, $profile_id,  array $options = [])
     {
+        $this->setAuthorizeAccount();
+        
         $options = array_merge([
             'currency' => $this->preferredCurrency(),
         ], $options);
@@ -296,13 +320,25 @@ trait Billable
         $paymentProfile->setPaymentProfileId($profile_id);
         $profileToCharge->setPaymentProfile($paymentProfile);
 
-        $amountWithTax = round(floatval($amount) * floatval('1.'.$this->taxPercentage()), 2);
+        
+        
+        
         $order = new AnetAPI\OrderType;
         $order->setDescription($options['description']);
 
+        
+        //convert pennies to dollars for authorize
+        
+        $money = new Money($amount, new Currency('USD'));
+        $currencies = new ISOCurrencies();
+        
+        $moneyFormatter = new DecimalMoneyFormatter($currencies);
+        
+         
         $transactionRequestType = new AnetAPI\TransactionRequestType();
         $transactionRequestType->setTransactionType("authCaptureTransaction");
-        $transactionRequestType->setAmount($amountWithTax);
+        $transactionRequestType->setAmount($moneyFormatter->format($money));
+        
         $transactionRequestType->setCurrencyCode($options['currency']);
         $transactionRequestType->setOrder($order);
         $transactionRequestType->setProfile($profileToCharge);
@@ -312,6 +348,7 @@ trait Billable
         $controller = new AnetController\CreateTransactionController($request);
         $response = $controller->executeWithApiResponse($requestor->env);
 
+        
         if ($response != null) {
             $tresponse = $response->getTransactionResponse();
             if (($tresponse != null) && ($tresponse->getResponseCode() == '1') ) {
