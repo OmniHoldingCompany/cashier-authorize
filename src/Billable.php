@@ -752,4 +752,62 @@ trait Billable
 
         return $brand;
     }
+    
+    /*
+     * If you are submitting a refund against a previous customer profile transaction, the following guidelines apply:
+
+    Include customerProfileId, customerPaymentProfileId, and transId.
+    
+     */
+    public function refundPreviousTransaction($transId, $amount, $customerPaymentProfileId ) {
+        
+        /* Create a merchantAuthenticationType object with authentication details
+         retrieved from the constants file */
+        $merchantAuthentication = $this->getMerchantAuthentication();
+        
+        // Set the transaction's refId
+        $refId = 'ref' . time();
+
+        $transaction = new AuthorizeNetTransaction;
+    	$transaction->amount = $amount;
+    	$transaction->customerProfileId = $this->$this->authorize_id;
+    	$transaction->customerPaymentProfileId = $customerPaymentProfileId;
+    	$transaction->transId = $transId; // original transaction ID
+    
+    	
+        $request = new AnetAPI\CreateTransactionRequest();
+        $request->setMerchantAuthentication($merchantAuthentication);
+        $request->setRefId($refId);
+        $request->setTransactionRequest( $transaction);
+        
+        
+        $response = $request->createCustomerProfileTransaction("Refund", $transaction);
+        $transactionResponse = $response->getTransactionResponse();
+        
+        $transactionId = $transactionResponse->transaction_id;
+        
+       
+        
+        return $response;
+        
+    }
+    
+    /*
+     * If you are submitting a refund for a non-profile transaction, the following guidelines apply:
+
+You must include transId, creditCardNumberMasked (or bankRoutingNumberMasked and bankAccountNumberMasked).
+
+     */
+    public function refundNonProfileTransaction($transId, $creditCardNumberMasked ) {
+    
+    }
+    
+    /*
+     * You must be enrolled in Expanded Credit Capabilities (ECC). For more information about ECC, go to http://www.authorize.net/files/ecc.pdf.
+     * You must include customerProfileId and customerPaymentProfileId.
+     * 
+     */
+    public function refundUnlinkedProfileTransaction($transId, $creditCardNumberMasked ) {
+    
+    }
 }
