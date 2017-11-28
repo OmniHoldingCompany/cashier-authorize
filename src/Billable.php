@@ -180,7 +180,7 @@ trait Billable
             return $response->getCustomerPaymentProfileId();
         } else {
             $errorMessages = $response->getMessages()->getMessage();
-            throw new \Exception($errorMessages[0]->getText());
+            throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
         }
 
         return $response;
@@ -203,7 +203,8 @@ trait Billable
 
             return $profileSelected;
         } else {
-            throw new \Exception($response->getMessages()->getMessage());
+            $errorMessages = $response->getMessages()->getMessage();
+            throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
         }
 
         return $response;
