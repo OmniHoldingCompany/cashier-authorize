@@ -2,6 +2,7 @@
 
 namespace Laravel\CashierAuthorizeNet;
 
+use App\Organization;
 use Exception;
 use Money\Money;
 use Money\Currencies\ISOCurrencies;
@@ -16,27 +17,11 @@ use Laravel\CashierAuthorizeNet\Requestor;
 use net\authorize\api\contract\v1 as AnetAPI;
 use net\authorize\api\constants as AnetConstants;
 use net\authorize\api\controller as AnetController;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 trait Billable
 {
-    /**
-     * Determine if the entity has a Stripe customer ID.
-     *
-     * @return bool
-     */
-    public function hasAuthorizeId()
-    {
-        return ! is_null($this->authorize_id);
-    }
-
-    public function setAuthorizeAccount()
-    {
-        if (empty($this->site_id)) {
-            throw new \Exception(' Customers need a Site');
-        }
-    }
-
     protected function getMerchantAuthentication()
     {
         $this->setAuthorizeAccount();
@@ -77,25 +62,18 @@ trait Billable
     /**
      * Create a Authorize customer for the given user.
      *
-     * @param array $paymentInformation
+     * @param array $cardDetails
      * @param array $options
      *
      * @return AuthorizeCustomer
-     * @internal param array $creditCardDetails
      *
+     * @throws Exception
      */
-    public function createAsAuthorizeCustomer($paymentInformation, $options = [])
+    public function createAsAuthorizeCustomer($cardDetails, $options = [])
     {
-        $this->setAuthorizeAccount();
+        $this->setAuthorizeAccount($this->organization);
 
-        $creditCard = new AnetAPI\CreditCardType();
-        $creditCard->setCardNumber($paymentInformation['number']);
-        $creditCard->setExpirationDate($paymentInformation['expiration']);
-        if ( ! empty($paymentInformation['cvv'])) {
-            $creditCard->setCardCode($paymentInformation['cvv']);
-        }
-        $paymentCreditCard = new AnetAPI\PaymentType();
-        $paymentCreditCard->setCreditCard($creditCard);
+        $paymentDetails = self::getPaymentDetails($cardDetails);
 
         //TODO we most likely need to be able to pass in the billing
         $billto = $this->getBillingObject($options);
@@ -103,7 +81,7 @@ trait Billable
         $paymentprofile = new AnetAPI\CustomerPaymentProfileType();
         $paymentprofile->setCustomerType('individual');
         $paymentprofile->setBillTo($billto);
-        $paymentprofile->setPayment($paymentCreditCard);
+        $paymentprofile->setPayment($paymentDetails);
 
         $customerprofile = new AnetAPI\CustomerProfileType();
         $customerprofile->setMerchantCustomerId("M_" . $this->id);
@@ -117,11 +95,11 @@ trait Billable
         $controller = new AnetController\CreateCustomerProfileController($request);
         $response   = $controller->executeWithApiResponse($requestor->env);
 
-        if (($response != null) && ($response->getMessages()->getResultCode() === "Ok")) {
-            $this->authorize_id         = $response->getCustomerProfileId();
-            $this->authorize_payment_id = $response->getCustomerPaymentProfileIdList()[0];
-            $this->save();
-        } else {
+        if (is_null($response)) {
+            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
+        }
+
+        if ($response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
 
             //THIS THIS CUSTOMER ALREADY EXISTS FOR SOME REASON INSTEAD OF FAILING LETS RECOVER
@@ -129,28 +107,21 @@ trait Billable
                 $this->authorize_id = preg_replace('/\D+/', '', $errorMessages[0]->getText());
                 $this->save();
 
-                return $this->addPaymentMethodToCustomer($paymentInformation, $options);
+                return $this->addPaymentMethodToCustomer($cardDetails, $options);
+            } else {
+                throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
             }
-
         }
 
-        return $this->authorize_payment_id;
+        $this->authorize_id = $response->getCustomerProfileId();
+        $this->save();
     }
 
-    public function addPaymentMethodToCustomer($paymentInformation, $options = [])
+    public function addPaymentMethodToCustomer($cardDetails, $options = [])
     {
         $merchantAuthentication = $this->getMerchantAuthentication();
-        // Set the transaction's refId
-        $refId = 'ref' . time();
 
-        $creditCard = new AnetAPI\CreditCardType();
-        $creditCard->setCardNumber($paymentInformation['number']);
-        $creditCard->setExpirationDate($paymentInformation['expiration']);
-        if ( ! empty($paymentInformation['cvv'])) {
-            $creditCard->setCardCode($paymentInformation['cvv']);
-        }
-        $paymentCreditCard = new AnetAPI\PaymentType();
-        $paymentCreditCard->setCreditCard($creditCard);
+        $paymentDetails = self::getPaymentDetails($cardDetails);
 
         $billto = $this->getBillingObject($options);
 
@@ -158,7 +129,7 @@ trait Billable
         $paymentprofile = new AnetAPI\CustomerPaymentProfileType();
         $paymentprofile->setCustomerType('individual');
         $paymentprofile->setBillTo($billto);
-        $paymentprofile->setPayment($paymentCreditCard);
+        $paymentprofile->setPayment($paymentDetails);
         $paymentprofile->setDefaultPaymentProfile(true);
 
         $paymentprofiles[] = $paymentprofile;
@@ -176,21 +147,30 @@ trait Billable
         $controller = new AnetController\CreateCustomerPaymentProfileController($paymentprofilerequest);
         $response   = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
 
-        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok")) {
-            return $response->getCustomerPaymentProfileId();
-        } else {
-            $errorMessages = $response->getMessages()->getMessage();
-            throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
+        if (is_null($response)) {
+            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
         }
 
-        return $response;
+        if ($response->getMessages()->getResultCode() !== "Ok") {
+            $errorMessages = $response->getMessages()->getMessage();
+            switch ($errorMessages[0]->getCode()) {
+                case 'E00039':
+                case 'E00040':
+                case 'E00042':
+                    throw new BadRequestHttpException($errorMessages[0]->getText());
+                    break;
+                default:
+                    throw new \Exception($errorMessages[0]->getText());
+                    break;
+            }
+        }
+
+        return $response->getCustomerPaymentProfileId();
     }
 
     public function getCustomerProfile()
     {
         $merchantAuthentication = $this->getMerchantAuthentication();
-        // Set the transaction's refId
-        $refId = 'ref' . time();
 
         $request = new AnetAPI\GetCustomerProfileRequest();
         $request->setMerchantAuthentication($merchantAuthentication);
@@ -198,40 +178,49 @@ trait Billable
         $controller = new AnetController\GetCustomerProfileController($request);
 
         $response = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
-        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok")) {
-            $profileSelected = $response->getProfile();
 
-            return $profileSelected;
-        } else {
-            $errorMessages = $response->getMessages()->getMessage();
-            throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
+        if (is_null($response)) {
+            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
         }
 
-        return $response;
+        if ($response->getMessages()->getResultCode() !== "Ok") {
+            $errorMessages = $response->getMessages()->getMessage();
+            switch ($errorMessages[0]->getCode()) {
+                case 'E00040':
+                    throw new BadRequestHttpException($errorMessages[0]->getText());
+                    break;
+                default:
+                    throw new \Exception($errorMessages[0]->getText());
+                    break;
+            }
+        }
+
+        $profileSelected = $response->getProfile();
+
+        return $profileSelected;
     }
 
     public function getCustomerPaymentProfiles()
     {
         $profile = $this->getCustomerProfile();
 
-        $payments = $profile->getPaymentProfiles();
-
-        return $payments;
+        return $profile->getPaymentProfiles();
     }
 
     public function getCustomerPaymentMethodsClean()
     {
-        $paymentprofiles = $this->getCustomerPaymentProfiles();
+        $paymentProfiles = $this->getCustomerPaymentProfiles();
+        $paymentMethods  = [];
 
-        $paymentMethods = [];
-        foreach ($paymentprofiles as $profile) {
-            $paymentMethod                       = [];
-            $paymentMethod['payment_profile_id'] = $profile->getCustomerPaymentProfileId();
-            $card                                = $profile->getPayment()->getCreditCard();
-            $paymentMethod['cardNumber']         = $card->getCardNumber();
-            $paymentMethod['expirationDate']     = $card->getExpirationDate();
-            $paymentMethod['type']               = $card->getCardType();
-            $paymentMethods[]                    = $paymentMethod;
+        foreach ($paymentProfiles as $profile) {
+            $card = $profile->getPayment()->getCreditCard();
+
+            $paymentMethods[] = [
+                'payment_profile_id' => $profile->getCustomerPaymentProfileId(),
+                'cardNumber'         => $card->getCardNumber(),
+                'expirationDate'     => $card->getExpirationDate(),
+                'type'               => $card->getCardType(),
+            ];
         }
 
         return $paymentMethods;
@@ -240,24 +229,32 @@ trait Billable
     public function deleteCustomerPaymentProfile($customerpaymentprofileid)
     {
         $merchantAuthentication = $this->getMerchantAuthentication();
-        // Set the transaction's refId
-        $refId = 'ref' . time();
 
         // Use an existing payment profile ID for this Merchant name and Transaction key
-
         $request = new AnetAPI\DeleteCustomerPaymentProfileRequest();
         $request->setMerchantAuthentication($merchantAuthentication);
         $request->setCustomerProfileId($this->authorize_id);
         $request->setCustomerPaymentProfileId($customerpaymentprofileid);
         $controller = new AnetController\DeleteCustomerPaymentProfileController($request);
         $response   = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
-        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok")) {
-            return $this;
-        } else {
-            $errorMessages = $response->getMessages()->getMessage();
-            throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
+
+        if (is_null($response)) {
+            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
         }
 
+        if ($response->getMessages()->getResultCode() !== "Ok") {
+            $errorMessages = $response->getMessages()->getMessage();
+            switch ($errorMessages[0]->getCode()) {
+                case 'E00040':
+                    throw new BadRequestHttpException($errorMessages[0]->getText());
+                    break;
+                default:
+                    throw new \Exception($errorMessages[0]->getText());
+                    break;
+            }
+        }
+
+        return $this;
     }
 
     /**
@@ -275,14 +272,12 @@ trait Billable
         $controller = new AnetController\DeleteCustomerProfileController($request);
         $response   = $controller->executeWithApiResponse($requestor->env);
 
-        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok")) {
-            return true;
-        } else {
+        if (is_null($response) || $response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
             throw new Exception("Response : " . $errorMessages[0]->getCode() . "  " . $errorMessages[0]->getText(), 1);
         }
 
-        return false;
+        return true;
     }
 
     /**
@@ -297,13 +292,12 @@ trait Billable
      */
     public function charge($amount, $profile_id, array $options = [])
     {
-        $this->setAuthorizeAccount();
+        $this->setAuthorizeAccount($this->organization);
 
         $options = array_merge([
-            'currency' => $this->preferredCurrency(),
+            'currency' => self::preferredCurrency(),
         ], $options);
 
-        $requestor = new Requestor();
 
         $profileToCharge = new AnetAPI\CustomerProfilePaymentType();
         $profileToCharge->setCustomerProfileId($this->authorize_id);
@@ -314,391 +308,155 @@ trait Billable
         $order = new AnetAPI\OrderType;
         $order->setDescription($options['description']);
 
-        //convert pennies to dollars for authorize
-        $money      = new Money($amount, new Currency('USD'));
-        $currencies = new ISOCurrencies();
+        $transactionRequest = self::createTransactionRequest("refundTransaction", $amount);
 
-        $moneyFormatter = new DecimalMoneyFormatter($currencies);
+        $transactionRequest->setCurrencyCode($options['currency']);
+        $transactionRequest->setOrder($order);
+        $transactionRequest->setProfile($profileToCharge);
 
-        $transactionRequestType = new AnetAPI\TransactionRequestType();
-        $transactionRequestType->setTransactionType("authCaptureTransaction");
-        $transactionRequestType->setAmount($moneyFormatter->format($money));
+        $response = self::buildAndExecuteRequest($transactionRequest);
 
-        $transactionRequestType->setCurrencyCode($options['currency']);
-        $transactionRequestType->setOrder($order);
-        $transactionRequestType->setProfile($profileToCharge);
+        if (is_null($response)) {
+            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
+        }
 
-        $request = $requestor->prepare((new AnetAPI\CreateTransactionRequest()));
-        $request->setTransactionRequest($transactionRequestType);
-        $controller = new AnetController\CreateTransactionController($request);
-        $response   = $controller->executeWithApiResponse($requestor->env);
+        if ($response->getMessages()->getResultCode() !== "Ok") {
+            $errorMessages = $response->getMessages()->getMessage();
+            switch ($errorMessages[0]->getCode()) {
+                case 'E00084':
+                    throw new BadRequestHttpException($errorMessages[0]->getText());
+                    break;
+                default:
+                    throw new \Exception($errorMessages[0]->getText());
+                    break;
+            }
+        }
 
-        if ($response != null) {
-            $tresponse = $response->getTransactionResponse();
-            if (($tresponse != null) && ($tresponse->getResponseCode() == '1')) {
+        $tresponse = $response->getTransactionResponse();
+
+        if (is_null($tresponse)) {
+            throw new Exception('ERROR: NO TRANSACTION RESPONSE', 1);
+        }
+
+        switch ($tresponse->getResponseCode()) {
+            case "1":
                 return [
                     'authCode' => $tresponse->getAuthCode(),
                     'transId'  => $tresponse->getTransId(),
                 ];
-            } else if (($tresponse != null) && ($tresponse->getResponseCode() == "2")) {
-                return false;
-            } else if (($tresponse != null) && ($tresponse->getResponseCode() == "4")) {
-                throw new Exception("ERROR: HELD FOR REVIEW", 1);
-            }
-        } else {
-            throw new Exception("ERROR: NO RESPONSE", 1);
+                break;
+
+            case "2":
+                // General decline, no further details.
+                throw new BadRequestHttpException($tresponse->getResponseText());
+                break;
+            case "3":
+                // A referral to a voice authorization center was received.
+                // Please call the appropriate number below for a voice authorization.
+                //   For American Express call: (800) 528-2121
+                //   For Diners Club call: (800) 525-9040
+                //   For Discover/Novus call: (800) 347-1111
+                //   For JCB call : (800) 522-9345
+                //   For Visa/Mastercard call: (800) 228-1122
+                // Once an authorization is issued, you can then submit the transaction through your Virtual Terminal as a Capture Only transaction.
+                throw new BadRequestHttpException($tresponse->getResponseText() . ' Voice authorization required.');
+                break;
+            case "4":
+                throw new BadRequestHttpException($tresponse->getResponseText() . ' The code returned from the processor indicating that the card used needs to be picked up.');
+                break;
+            case "11":
+                // A transaction with identical amount and credit card information was submitted within the previous two minutes.
+                throw new BadRequestHttpException($tresponse->getResponseText());
+                break;
+
+            default:
+                throw new Exception('Unknown response code: ' . $tresponse->getResponseCode());
+        }
+    }
+
+    /**
+     * Return money to a credit card.
+     *
+     * @param  array   $cardDetails Credit cards details
+     * @param  integer $amount      Amount to be refunded, in cents
+     *
+     * @return integer ADN Transaction ID
+     * @throws \Exception
+     */
+    public function refund($cardDetails, $amount)
+    {
+        if ($amount <= 0) {
+            throw new \Exception('Refund amount must be greater than 0');
         }
 
-        return false;
-    }
+        $this->setAuthorizeAccount($this->organization);
 
-    /**
-     * Determines if the customer currently has a card on file.
-     *
-     * @return bool
-     */
-    public function hasCardOnFile()
-    {
-        return (bool)count($this->getCustomerPaymentProfiles());
-    }
+        $paymentDetails = $this->getPaymentDetails($cardDetails);
 
-    /**
-     * Invoice the customer for the given amount.
-     *
-     * @param  string $description
-     * @param  int    $amount
-     * @param  array  $options
-     *
-     * @return bool
-     *
-     * @throws \Stripe\Error\Card
-     */
-    public function invoiceFor($description, $amount, array $options = [])
-    {
-        if ( ! $this->authorize_id) {
-            throw new InvalidArgumentException('User is not a customer. See the createAsAuthorizeCustomer method.');
+        $transactionRequest = $this->createTransactionRequest("refundTransaction", $amount);
+        $transactionRequest->setPayment($paymentDetails);
+
+        $response = $this->buildAndExecuteRequest($transactionRequest);
+
+        if (is_null($response)) {
+            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
         }
 
-        $options = array_merge([
-            'currency'    => $this->preferredCurrency(),
-            'description' => $description,
-        ], $options);
-
-        return $this->charge($amount, $options);
-    }
-
-    /**
-     * Begin creating a new subscription.
-     *
-     * @param  string $subscription
-     * @param  string $plan
-     *
-     * @return \Laravel\CashierAuthorizeNet\SubscriptionBuilder
-     */
-    public function newSubscription($subscription, $plan)
-    {
-        return new SubscriptionBuilder($this, $subscription, $plan);
-    }
-
-    /**
-     * Determine if the user is on trial.
-     *
-     * @param  string      $subscription
-     * @param  string|null $plan
-     *
-     * @return bool
-     */
-    public function onTrial($subscription = 'default', $plan = null)
-    {
-        if (func_num_args() === 0 && $this->onGenericTrial()) {
-            return true;
-        }
-
-        $subscription = $this->subscription($subscription);
-
-        if (is_null($plan)) {
-            return $subscription && $subscription->onTrial();
-        }
-
-        return $subscription && $subscription->onTrial() &&
-               $subscription->authorize_plan === $plan;
-    }
-
-    /**
-     * Determine if the user is on a "generic" trial at the user level.
-     *
-     * @return bool
-     */
-    public function onGenericTrial()
-    {
-        return $this->trial_ends_at && Carbon::now()->lt($this->trial_ends_at);
-    }
-
-    /**
-     * Determine if the user has a given subscription.
-     *
-     * @param  string      $subscription
-     * @param  string|null $plan
-     *
-     * @return bool
-     */
-    public function subscribed($subscription = 'default', $plan = null)
-    {
-        $subscription = $this->subscription($subscription);
-
-        if (is_null($subscription)) {
-            return false;
-        }
-
-        if (is_null($plan)) {
-            return $subscription->valid();
-        }
-
-        return $subscription->valid() &&
-               $subscription->authorize_plan === $plan;
-    }
-
-    /**
-     * Get a subscription instance by name.
-     *
-     * @param  string $subscription
-     *
-     * @return \Laravel\Cashier\Subscription|null
-     */
-    public function subscription($subscription = 'default')
-    {
-        return $this->subscriptions->sortByDesc(function ($value) {
-            return $value->created_at->getTimestamp();
-        })->first(function ($key, $value) use ($subscription) {
-            return $value->name === $subscription;
-        });
-    }
-
-    /**
-     * Get all of the subscriptions for the user.
-     *
-     * @return \Illuminate\Database\Eloquent\Collection
-     */
-    public function subscriptions()
-    {
-        return $this->hasMany(Subscription::class, 'user_id')->orderBy('created_at', 'desc');
-    }
-
-    /**
-     * Get the entity's upcoming invoice.
-     *
-     * @return \Laravel\Cashier\Invoice|null
-     */
-    public function upcomingInvoice()
-    {
-        $subscription  = $this->subscriptions()->first();
-        $startDate     = $subscription->created_at;
-        $now           = Carbon::now();
-        $authorizePlan = $subscription->authorize_plan;
-        $config        = Config::get('cashier-authorize');
-
-        $thisMonthsBillingDate = Carbon::createFromDate($now->year, $now->month, $startDate->day);
-
-        if ($thisMonthsBillingDate->lte($now)) {
-            $billingDate = $thisMonthsBillingDate;
-        } else {
-            $billingDate = $thisMonthsBillingDate->addMonths(1);
-        }
-
-        $invoice = new Invoice($this, [
-            'date'         => $billingDate->timestamp,
-            'subscription' => $subscription,
-            'tax_percent'  => $this->taxPercentage(),
-            'tax'          => floatval($config[$authorizePlan]['amount']) * floatval('0.' . $this->taxPercentage()),
-        ]);
-
-        return $invoice;
-    }
-
-    /**
-     * Find an invoice by ID.
-     *
-     * @param $invoiceId
-     *
-     * @return \Laravel\Cashier\Invoice|null
-     * @throws Exception
-     *
-     */
-    public function findInvoice($invoiceId)
-    {
-        $requestor = new Requestor();
-        $request   = $requestor->prepare((new AnetAPI\GetTransactionDetailsRequest()));
-        $request->setTransId($invoiceId);
-
-        $controller = new AnetController\GetTransactionDetailsController($request);
-
-        $response = $controller->executeWithApiResponse($requestor->env);
-
-        $invoice = [];
-
-        if (($response != null) && ($response->getMessages()->getResultCode() == "Ok")) {
-            $invoice = [
-                'id'       => $response->getTransaction()->getTransId(),
-                'amount'   => $response->getTransaction()->getAuthAmount(),
-                'status'   => $response->getTransaction()->getTransactionStatus(),
-                'response' => $response,
-            ];
-        } else {
+        if ($response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
-            throw new Exception("Response : " . $errorMessages[0]->getCode() . "  " . $errorMessages[0]->getText(), 1);
-        }
-
-        return $invoice;
-    }
-
-    /**
-     * Find an invoice or throw a 404 error.
-     *
-     * @param  string $id
-     *
-     * @return \Laravel\Cashier\Invoice
-     */
-    public function findInvoiceOrFail($id)
-    {
-        $invoice = $this->findInvoice($id);
-
-        if (is_null($invoice)) {
-            return false;
-        }
-
-        return $invoice;
-    }
-
-    /**
-     * Create an invoice download Response.
-     *
-     * @param  string $id
-     * @param  array  $data
-     * @param  string $storagePath
-     *
-     * @return \Symfony\Component\HttpFoundation\Response
-     */
-    public function downloadInvoice($id, array $data, $storagePath = null)
-    {
-        if ( ! $this->findInvoiceOrFail($id)) {
-            $invoices = $this->invoices();
-
-            return $invoices[$id]->download($data, $storagePath);
-        }
-
-        return $this->findInvoiceOrFail($id)->download($data, $storagePath);
-    }
-
-    /**
-     * Get a subcription from Authorize
-     *
-     * @param  string $subscriptionId
-     *
-     * @return array
-     * @throws Exception
-     */
-    public function getSubscriptionFromAuthorize($subscriptionId)
-    {
-        $requestor = new Requestor();
-        $request   = $requestor->prepare((new AnetAPI\ARBGetSubscriptionRequest()));
-        $request->setSubscriptionId($subscriptionId);
-        $controller   = new AnetController\ARBGetSubscriptionController($request);
-        $response     = $controller->executeWithApiResponse($requestor->env);
-        $subscription = [];
-
-        if ($response != null) {
-            if ($response->getMessages()->getResultCode() == "Ok") {
-                $subscription = [
-                    'name'        => $response->getSubscription()->getName(),
-                    'amount'      => $response->getSubscription()->getAmount(),
-                    'status'      => $response->getSubscription()->getStatus(),
-                    'description' => $response->getSubscription()->getProfile()->getDescription(),
-                    'customer'    => $response->getSubscription()->getProfile()->getCustomerProfileId(),
-                ];
-            } else {
-                $errorMessages = $response->getMessages()->getMessage();
-                throw new Exception("Response : " . $errorMessages[0]->getCode() . "  " . $errorMessages[0]->getText(),
-                    1);
-            }
-        } else {
-            throw new Exception("Null response error", 1);
-        }
-
-        return $subscription;
-    }
-
-    /**
-     * Get a collection of the entity's invoices.
-     *
-     * @param  string $plan
-     *
-     * @return \Illuminate\Support\Collection
-     */
-    public function invoices($plan)
-    {
-        $subscription  = $this->subscriptions($plan)->first();
-        $startDate     = $subscription->created_at;
-        $authorizeId   = $subscription->authorize_id;
-        $authorizePlan = $subscription->authorize_plan;
-        $config        = Config::get('cashier-authorize');
-        $endDate       = Carbon::now();
-        $difference    = $startDate->diffInMonths($endDate);
-        $subscription  = $this->getSubscriptionFromAuthorize($authorizeId);
-
-        $invoices = [];
-
-        if ($difference >= 1) {
-            foreach (range(1, $difference) as $invoiceNumber) {
-                $date       = $startDate->addMonths($invoiceNumber);
-                $invoices[] = new Invoice($this, [
-                    'date'         => $date->timestamp,
-                    'subscription' => $subscription,
-                    'tax_percent'  => $this->taxPercentage(),
-                    'tax'          => floatval($config[$authorizePlan]['amount']) * floatval('0.' . $this->taxPercentage()),
-                ]);
+            switch ($errorMessages[0]->getCode()) {
+                case 'E00105':
+                    throw new BadRequestHttpException($errorMessages[0]->getText());
+                    break;
+                default:
+                    throw new \Exception($errorMessages[0]->getText());
+                    break;
             }
         }
 
-        return new Collection($invoices);
+        $tresponse = $response->getTransactionResponse();
+
+        if (is_null($tresponse)) {
+            throw new Exception('ERROR: NO TRANSACTION RESPONSE', 1);
+        }
+
+        if (is_null($tresponse->getErrors())) {
+            throw new \Exception($tresponse->getErrors()[0]->getErrorText(),
+                $tresponse->getErrors()[0]->getErrorCode());
+        }
+
+        return $tresponse->getTransId();
+    }
+
+    private static function getPaymentDetails($cardDetails)
+    {
+        $creditCard = new AnetAPI\CreditCardType();
+        $creditCard->setCardNumber($cardDetails['number']);
+        $creditCard->setExpirationDate($cardDetails['expiration']);
+        if ( ! empty($paymentInformation['cvv'])) {
+            $creditCard->setCardCode($paymentInformation['cvv']);
+        }
+
+        $paymentDetails = new AnetAPI\PaymentType();
+        $paymentDetails->setCreditCard($creditCard);
+
+        return $paymentDetails;
     }
 
     /**
-     * Determine if the user is actively subscribed to one of the given plans.
+     * Convert pennies to dollars for Authorize.net
      *
-     * @param  array|string $plans
-     * @param  string       $subscription
+     * @param integer $pennies
      *
-     * @return bool
+     * @return float
      */
-    public function subscribedToPlan($plans, $subscription = 'default')
+    private static function convertPenniesToDollars($pennies)
     {
-        $subscription = $this->subscription($subscription);
+        $money          = new Money($pennies, new Currency('USD'));
+        $currencies     = new ISOCurrencies();
+        $moneyFormatter = new DecimalMoneyFormatter($currencies);
 
-        if ( ! $subscription || ! $subscription->valid()) {
-            return false;
-        }
-
-        foreach ((array)$plans as $plan) {
-            if ($subscription->authorize_plan === $plan) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Determine if the entity is on the given plan.
-     *
-     * @param  string $plan
-     *
-     * @return bool
-     */
-    public function onPlan($plan)
-    {
-        return ! is_null($this->subscriptions->first(function ($key, $value) use ($plan) {
-            return $value->authorize_plan === $plan && $value->valid();
-        }));
+        return $moneyFormatter->format($money);
     }
 
     /**
@@ -706,103 +464,69 @@ trait Billable
      *
      * @return string
      */
-    public function preferredCurrency()
+    private static function preferredCurrency()
     {
         return Cashier::usesCurrency();
     }
 
     /**
-     * Get the tax percentage to apply to the subscription.
+     * Get the Stripe supported currency used by the entity.
      *
-     * @return int
-     */
-    public function taxPercentage()
-    {
-        return 0;
-    }
-
-    /**
-     * Detect the brand cause Authorize wont give that to us
-     *
-     * @param  string $card Card number
+     * @param string  $type
+     * @param integer $pennies
      *
      * @return string
      */
-    public function cardBrandDetector($card)
+    private static function createTransactionRequest($type, $pennies)
     {
-        $brand  = 'Unknown';
-        $number = preg_replace('/[^\d]/', '', $card);
+        $transactionRequest = new AnetAPI\TransactionRequestType();
+        $transactionRequest->setTransactionType($type);
+        $transactionRequest->setAmount(self::convertPenniesToDollars($pennies));
 
-        if (preg_match('/^3[47][0-9]{13}$/', $number)) {
-            $brand = 'American Express';
-        } elseif (preg_match('/^3(?:0[0-5]|[68][0-9])[0-9]{11}$/', $number)) {
-            $brand = 'Diners Club';
-        } elseif (preg_match('/^6(?:011|5[0-9][0-9])[0-9]{12}$/', $number)) {
-            $brand = 'Discover';
-        } elseif (preg_match('/^(?:2131|1800|35\d{3})\d{11}$/', $number)) {
-            $brand = 'JCB';
-        } elseif (preg_match('/^5[1-5][0-9]{14}$/', $number)) {
-            $brand = 'MasterCard';
-        } elseif (preg_match('/^4[0-9]{12}(?:[0-9]{3})?$/', $number)) {
-            $brand = 'Visa';
-        }
-
-        return $brand;
+        return $transactionRequest;
     }
 
-    /*
-     * If you are submitting a refund against a previous customer profile transaction, the following guidelines apply:
-
-    Include customerProfileId, customerPaymentProfileId, and transId.
-    
+    /**
+     * Get the Stripe supported currency used by the entity.
+     *
+     * @return string
      */
-    public function refundPreviousTransaction($transId, $amount, $customerPaymentProfileId)
+    private static function buildAndExecuteRequest($transactionRequest)
     {
-        /* Create a merchantAuthenticationType object with authentication details
-         retrieved from the constants file */
-        $merchantAuthentication = $this->getMerchantAuthentication();
-
-        // Set the transaction's refId
-        $refId = 'ref' . time();
-
-        $transaction                           = new AuthorizeNetTransaction;
-        $transaction->amount                   = $amount;
-        $transaction->customerProfileId        = $this->$this->authorize_id;
-        $transaction->customerPaymentProfileId = $customerPaymentProfileId;
-        $transaction->transId                  = $transId; // original transaction ID
-
         $request = new AnetAPI\CreateTransactionRequest();
-        $request->setMerchantAuthentication($merchantAuthentication);
-        $request->setRefId($refId);
-        $request->setTransactionRequest($transaction);
+        $request->setRefId('ref' . time());
+        $request->setTransactionRequest($transactionRequest);
 
+        $requestor = new Requestor();
+        $requestor->prepare($request);
 
-        $response            = $request->createCustomerProfileTransaction("Refund", $transaction);
-        $transactionResponse = $response->getTransactionResponse();
+        $controller = new AnetController\CreateTransactionController($request);
 
-        $transactionId = $transactionResponse->transaction_id;
-
-        return $response;
+        /** @var AnetApiResponseType $response */
+        return $controller->executeWithApiResponse($requestor->env);
     }
 
-    /*
-     * If you are submitting a refund for a non-profile transaction, the following guidelines apply:
-
-You must include transId, creditCardNumberMasked (or bankRoutingNumberMasked and bankAccountNumberMasked).
-
+    /**
+     *
      */
-    public function refundNonProfileTransaction($transId, $creditCardNumberMasked)
+    private function setAuthorizeAccount()
     {
+        $organization = $this->organization;
 
+        $loader = new \Dotenv\Loader('notreal');
+        $loader->setEnvironmentVariable('ADN_API_LOGIN_ID', $organization->adn_api_login_id);
+        $loader->setEnvironmentVariable('ADN_TRANSACTION_KEY', $organization->adn_transaction_key);
+        $loader->setEnvironmentVariable('ADN_SECRET_KEY', $organization->adn_secret_key);
     }
 
-    /*
-     * You must be enrolled in Expanded Credit Capabilities (ECC). For more information about ECC, go to http://www.authorize.net/files/ecc.pdf.
-     * You must include customerProfileId and customerPaymentProfileId.
-     * 
+    /**
+     *
      */
-    public function refundUnlinkedProfileTransaction($transId, $creditCardNumberMasked)
+    private function clearAuthorizeAccount()
     {
-
+        $loader = new \Dotenv\Loader('notreal');
+        $loader->clearEnvironmentVariable('ADN_API_LOGIN_ID');
+        $loader->clearEnvironmentVariable('ADN_TRANSACTION_KEY');
+        $loader->clearEnvironmentVariable('ADN_SECRET_KEY');
     }
 }
