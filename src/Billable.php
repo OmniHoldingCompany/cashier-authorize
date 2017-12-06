@@ -417,8 +417,8 @@ trait Billable
         $creditCard = new AnetAPI\CreditCardType();
         $creditCard->setCardNumber($cardDetails['number']);
         $creditCard->setExpirationDate($cardDetails['expiration']);
-        if ( ! empty($paymentInformation['cvv'])) {
-            $creditCard->setCardCode($paymentInformation['cvv']);
+        if ( ! empty($cardDetails['cvv'])) {
+            $creditCard->setCardCode($cardDetails['cvv']);
         }
 
         $paymentDetails = new AnetAPI\PaymentType();
