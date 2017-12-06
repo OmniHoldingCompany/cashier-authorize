@@ -268,13 +268,13 @@ trait Billable
      * Make a "one off" charge on the customer for the given amount.
      *
      * @param  int   $amount
-     * @param  int   $profile_id
+     * @param  int   $paymentProfileId
      * @param  array $options
      *
-     * @return array|bool
+     * @return array
      * @throws Exception
      */
-    public function charge($amount, $profile_id, array $options = [])
+    public function charge($amount, $paymentProfileId, array $options = [])
     {
         $this->setAuthorizeAccount();
 
@@ -286,7 +286,7 @@ trait Billable
         $profileToCharge = new AnetAPI\CustomerProfilePaymentType();
         $profileToCharge->setCustomerProfileId($this->authorize_id);
         $paymentProfile = new AnetAPI\PaymentProfileType();
-        $paymentProfile->setPaymentProfileId($profile_id);
+        $paymentProfile->setPaymentProfileId($paymentProfileId);
         $profileToCharge->setPaymentProfile($paymentProfile);
 
         $order = new AnetAPI\OrderType;
@@ -324,10 +324,7 @@ trait Billable
 
         switch ($tresponse->getResponseCode()) {
             case "1":
-                return [
-                    'authCode' => $tresponse->getAuthCode(),
-                    'transId'  => $tresponse->getTransId(),
-                ];
+                // Success
                 break;
 
             case "2":
@@ -356,6 +353,11 @@ trait Billable
             default:
                 throw new Exception('Unknown response code: ' . $tresponse->getResponseCode());
         }
+
+        return [
+            'authCode' => $tresponse->getAuthCode(),
+            'transId'  => $tresponse->getTransId(),
+        ];
     }
 
     /**
