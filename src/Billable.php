@@ -205,10 +205,10 @@ trait Billable
             $card = $profile->getPayment()->getCreditCard();
 
             $paymentMethods[] = [
-                'payment_profile_id' => $profile->getCustomerPaymentProfileId(),
-                'cardNumber'         => $card->getCardNumber(),
-                'expirationDate'     => $card->getExpirationDate(),
-                'type'               => $card->getCardType(),
+                'id'         => $profile->getCustomerPaymentProfileId(),
+                'number'     => $card->getCardNumber(),
+                'expiration' => $card->getExpirationDate(),
+                'type'       => $card->getCardType(),
             ];
         }
 
