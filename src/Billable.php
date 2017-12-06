@@ -60,33 +60,17 @@ trait Billable
     }
 
     /**
-     * Create a Authorize customer for the given user.
-     *
-     * @param array $cardDetails
-     * @param array $options
-     *
-     * @return AuthorizeCustomer
+     * Create an Authorize customer for the given user.
      *
      * @throws Exception
      */
-    public function createAsAuthorizeCustomer($cardDetails, $options = [])
+    public function initializeCustomerProfile()
     {
-        $this->setAuthorizeAccount($this->organization);
-
-        $paymentDetails = self::getPaymentDetails($cardDetails);
-
-        //TODO we most likely need to be able to pass in the billing
-        $billto = $this->getBillingObject($options);
-
-        $paymentprofile = new AnetAPI\CustomerPaymentProfileType();
-        $paymentprofile->setCustomerType('individual');
-        $paymentprofile->setBillTo($billto);
-        $paymentprofile->setPayment($paymentDetails);
+        $this->setAuthorizeAccount();
 
         $customerprofile = new AnetAPI\CustomerProfileType();
         $customerprofile->setMerchantCustomerId("M_" . $this->id);
         $customerprofile->setEmail($this->email);
-        $customerprofile->setPaymentProfiles([$paymentprofile]);
 
         $requestor = new Requestor();
         $request   = $requestor->prepare(new AnetAPI\CreateCustomerProfileRequest());
@@ -102,23 +86,28 @@ trait Billable
         if ($response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
 
-            //THIS THIS CUSTOMER ALREADY EXISTS FOR SOME REASON INSTEAD OF FAILING LETS RECOVER
-            if (strpos(strtolower($errorMessages[0]->getText()), 'a duplicate record with id') !== false) {
-                $this->authorize_id = preg_replace('/\D+/', '', $errorMessages[0]->getText());
-                $this->save();
-
-                return $this->addPaymentMethodToCustomer($cardDetails, $options);
-            } else {
-                throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
-            }
+            throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
         }
 
         $this->authorize_id = $response->getCustomerProfileId();
         $this->save();
     }
 
+    /**
+     * Create an Authorize customer for the given user.
+     *
+     * @param array $options
+     *
+     * @return integer payment profile ID
+     *
+     * @throws Exception
+     */
     public function addPaymentMethodToCustomer($cardDetails, $options = [])
     {
+        if ( ! $this->authorize_id) {
+            $this->initializeCustomerProfile();
+        }
+
         $merchantAuthentication = $this->getMerchantAuthentication();
 
         $paymentDetails = self::getPaymentDetails($cardDetails);
