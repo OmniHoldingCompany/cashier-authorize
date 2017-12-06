@@ -191,15 +191,10 @@ trait Billable
 
     public function getCustomerPaymentProfiles()
     {
-        $profile = $this->getCustomerProfile();
+        $profile         = $this->getCustomerProfile();
+        $paymentProfiles = $profile->getPaymentProfiles();
 
-        return $profile->getPaymentProfiles();
-    }
-
-    public function getCustomerPaymentMethodsClean()
-    {
-        $paymentProfiles = $this->getCustomerPaymentProfiles();
-        $paymentMethods  = [];
+        $paymentMethods = [];
 
         foreach ($paymentProfiles as $profile) {
             $card = $profile->getPayment()->getCreditCard();
