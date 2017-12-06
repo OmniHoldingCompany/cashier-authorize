@@ -281,7 +281,7 @@ trait Billable
      */
     public function charge($amount, $profile_id, array $options = [])
     {
-        $this->setAuthorizeAccount($this->organization);
+        $this->setAuthorizeAccount();
 
         $options = array_merge([
             'currency' => self::preferredCurrency(),
@@ -378,7 +378,7 @@ trait Billable
             throw new \Exception('Refund amount must be greater than 0');
         }
 
-        $this->setAuthorizeAccount($this->organization);
+        $this->setAuthorizeAccount();
 
         $paymentDetails = $this->getPaymentDetails($cardDetails);
 
