@@ -38,7 +38,7 @@ trait Billable
     protected function getBillingObject($data = [])
     {
         $billto = new AnetAPI\CustomerAddressType();
-        if ( ! empty($data['first_name'])) {
+        if (!empty($data['first_name'])) {
             $billto->setFirstName($data['first_name']);
             $billto->setLastName($data['last_name']);
             $billto->setAddress($data['address_1']);
@@ -104,7 +104,7 @@ trait Billable
      */
     public function addPaymentMethodToCustomer($cardDetails, $options = [])
     {
-        if ( ! $this->authorize_id) {
+        if (!$this->authorize_id) {
             $this->initializeCustomerProfile();
         }
 
@@ -276,6 +276,10 @@ trait Billable
      */
     public function charge($amount, $paymentProfileId, array $options = [])
     {
+        if ($amount <= 0) {
+            throw new \Exception('Charge amount must be greater than 0');
+        }
+
         $this->setAuthorizeAccount();
 
         $options = array_merge([
@@ -419,7 +423,7 @@ trait Billable
         $creditCard = new AnetAPI\CreditCardType();
         $creditCard->setCardNumber($cardDetails['number']);
         $creditCard->setExpirationDate($cardDetails['expiration']);
-        if ( ! empty($cardDetails['cvv'])) {
+        if (!empty($cardDetails['cvv'])) {
             $creditCard->setCardCode($cardDetails['cvv']);
         }
 
