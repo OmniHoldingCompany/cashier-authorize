@@ -292,7 +292,7 @@ trait Billable
         $order = new AnetAPI\OrderType;
         $order->setDescription($options['description']);
 
-        $transactionRequest = self::createTransactionRequest("refundTransaction", $amount);
+        $transactionRequest = self::createTransactionRequest("authCaptureTransaction", $amount);
 
         $transactionRequest->setCurrencyCode($options['currency']);
         $transactionRequest->setOrder($order);
