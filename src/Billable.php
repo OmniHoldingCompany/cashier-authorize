@@ -314,6 +314,9 @@ trait Billable
                 case 'E00084':
                     throw new BadRequestHttpException($errorMessages[0]->getText());
                     break;
+                case 'E00027':
+                    // Transaction error caught below
+                    break;
                 default:
                     throw new \Exception($errorMessages[0]->getText());
                     break;
@@ -391,12 +394,14 @@ trait Billable
         if (is_null($response)) {
             throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
         }
-
         if ($response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
             switch ($errorMessages[0]->getCode()) {
                 case 'E00105':
                     throw new BadRequestHttpException($errorMessages[0]->getText());
+                    break;
+                case 'E00027':
+                    // Transaction error caught below
                     break;
                 default:
                     throw new \Exception($errorMessages[0]->getText());
