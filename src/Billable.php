@@ -22,10 +22,44 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 trait Billable
 {
-    protected function getMerchantAuthentication()
+    public function getAuthorizePaymentIdAttribute($authorizePaymentId)
     {
-        $this->setAuthorizeAccount();
+        if (is_null($authorizePaymentId)) {
+            $authorizePaymentId         = $this->getCustomerPaymentProfiles()[0]['id'];
+            $this->authorize_payment_id = $authorizePaymentId;
+            $this->save();
+        }
 
+        return $authorizePaymentId;
+    }
+
+    public function getAuthorizeIdAttribute($authorizeId)
+    {
+        if (is_null($authorizeId)) {
+            try {
+                $authorizeId        = $this->getCustomerProfileByCustomerId($this->authorize_customer_id)->getCustomerProfileId();
+                $this->authorize_id = $authorizeId;
+                $this->save();
+            } catch (BadRequestHttpException $e) {
+                //
+            }
+        }
+
+        if (is_null($authorizeId) && isset($this->email)) {
+            try {
+                $authorizeId        = $this->getCustomerProfileByEmail($this->email)->getCustomerProfileId();
+                $this->authorize_id = $authorizeId;
+                $this->save();
+            } catch (BadRequestHttpException $e) {
+                //
+            }
+        }
+
+        return $authorizeId;
+    }
+
+    public static function getMerchantAuthentication()
+    {
         /* Create a merchantAuthenticationType object with authentication details
          retrieved from the constants file */
         $merchantAuthentication = new AnetAPI\MerchantAuthenticationType();
@@ -69,7 +103,7 @@ trait Billable
         $this->setAuthorizeAccount();
 
         $customerprofile = new AnetAPI\CustomerProfileType();
-        $customerprofile->setMerchantCustomerId("M_" . $this->id);
+        $customerprofile->setMerchantCustomerId((string) rand(1000000000000, 1000000000000000000));
         $customerprofile->setEmail($this->email);
 
         $requestor = new Requestor();
@@ -90,6 +124,7 @@ trait Billable
         }
 
         $this->authorize_id = $response->getCustomerProfileId();
+        $this->authorize_customer_id = $customerprofile->getMerchantCustomerId();
         $this->save();
     }
 
@@ -157,13 +192,53 @@ trait Billable
         return $response->getCustomerPaymentProfileId();
     }
 
-    public function getCustomerProfile()
+    public function getCustomerProfileByProfileId($profileId = null)
     {
         $merchantAuthentication = $this->getMerchantAuthentication();
 
         $request = new AnetAPI\GetCustomerProfileRequest();
         $request->setMerchantAuthentication($merchantAuthentication);
-        $request->setCustomerProfileId($this->authorize_id);
+        $request->setCustomerProfileId($profileId ?? $this->authorize_id);
+
+        $profileSelected = self::getCustomerProfile($request);
+
+        return $profileSelected;
+    }
+
+    public function getCustomerProfileByEmail($email = null)
+    {
+        $merchantAuthentication = $this->getMerchantAuthentication();
+
+        $request = new AnetAPI\GetCustomerProfileRequest();
+        $request->setMerchantAuthentication($merchantAuthentication);
+        $request->setEmail($email ?? $this->email);
+        $controller = new AnetController\GetCustomerProfileController($request);
+
+        $profileSelected = self::getCustomerProfile($request);
+
+        return $profileSelected;
+    }
+
+    public function getCustomerProfileByCustomerId($customerId = null)
+    {
+        if (is_null($this->authorize_customer_id)){
+            $this->initializeCustomerProfile();
+        }
+
+        $merchantAuthentication = $this->getMerchantAuthentication();
+
+        $request = new AnetAPI\GetCustomerProfileRequest();
+        $request->setMerchantAuthentication($merchantAuthentication);
+        $request->setMerchantCustomerId($customerId ?? $this->authorize_customer_id);
+        $controller = new AnetController\GetCustomerProfileController($request);
+
+        $profileSelected = self::getCustomerProfile($request);
+
+        return $profileSelected;
+    }
+
+    private static function getCustomerProfile($request)
+    {
         $controller = new AnetController\GetCustomerProfileController($request);
 
         $response = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
@@ -191,7 +266,7 @@ trait Billable
 
     public function getCustomerPaymentProfiles()
     {
-        $profile         = $this->getCustomerProfile();
+        $profile         = $this->getCustomerProfileByProfileId();
         $paymentProfiles = $profile->getPaymentProfiles();
 
         $paymentMethods = [];
