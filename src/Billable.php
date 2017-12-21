@@ -22,42 +22,6 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 trait Billable
 {
-    public function getAuthorizePaymentIdAttribute($authorizePaymentId)
-    {
-        if (is_null($authorizePaymentId)) {
-            $authorizePaymentId         = $this->getCustomerPaymentProfiles()[0]['id'];
-            $this->authorize_payment_id = $authorizePaymentId;
-            $this->save();
-        }
-
-        return $authorizePaymentId;
-    }
-
-    public function getAuthorizeIdAttribute($authorizeId)
-    {
-        if (is_null($authorizeId)) {
-            try {
-                $authorizeId        = $this->getCustomerProfileByCustomerId($this->authorize_customer_id)->getCustomerProfileId();
-                $this->authorize_id = $authorizeId;
-                $this->save();
-            } catch (BadRequestHttpException $e) {
-                //
-            }
-        }
-
-        if (is_null($authorizeId) && isset($this->email)) {
-            try {
-                $authorizeId        = $this->getCustomerProfileByEmail($this->email)->getCustomerProfileId();
-                $this->authorize_id = $authorizeId;
-                $this->save();
-            } catch (BadRequestHttpException $e) {
-                //
-            }
-        }
-
-        return $authorizeId;
-    }
-
     public static function getMerchantAuthentication()
     {
         /* Create a merchantAuthenticationType object with authentication details
@@ -355,8 +319,6 @@ trait Billable
             throw new \Exception('Charge amount must be greater than 0');
         }
 
-        $this->setAuthorizeAccount();
-
         $options = array_merge([
             'currency' => self::preferredCurrency(),
         ], $options);
@@ -456,8 +418,6 @@ trait Billable
         if ($amount <= 0) {
             throw new \Exception('Refund amount must be greater than 0');
         }
-
-        $this->setAuthorizeAccount();
 
         $paymentDetails = $this->getPaymentDetails($cardDetails);
 
@@ -574,29 +534,5 @@ trait Billable
 
         /** @var AnetApiResponseType $response */
         return $controller->executeWithApiResponse($requestor->env);
-    }
-
-    /**
-     *
-     */
-    private function setAuthorizeAccount()
-    {
-        $organization = $this->organization;
-
-        $loader = new \Dotenv\Loader('notreal');
-        $loader->setEnvironmentVariable('ADN_API_LOGIN_ID', $organization->adn_api_login_id);
-        $loader->setEnvironmentVariable('ADN_TRANSACTION_KEY', $organization->adn_transaction_key);
-        $loader->setEnvironmentVariable('ADN_SECRET_KEY', $organization->adn_secret_key);
-    }
-
-    /**
-     *
-     */
-    private function clearAuthorizeAccount()
-    {
-        $loader = new \Dotenv\Loader('notreal');
-        $loader->clearEnvironmentVariable('ADN_API_LOGIN_ID');
-        $loader->clearEnvironmentVariable('ADN_TRANSACTION_KEY');
-        $loader->clearEnvironmentVariable('ADN_SECRET_KEY');
     }
 }
