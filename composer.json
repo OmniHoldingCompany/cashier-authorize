@@ -27,11 +27,12 @@
             "illuminate/support": "~5.1",
             "nesbot/carbon": "~1.0",
             "php": ">=5.5.9",
-            "symfony/http-kernel": "~2.7|~3.0"
+            "symfony/http-kernel": "~2.7|~3.0",
+            "moneyphp/money": "^3.0"
         },
         "require-dev": {
-            "goetas/xsd-reader": "2.*@dev",
-            "goetas/xsd2php": "2.0.x-dev#fdc2ab0bb3f2b3ab796ca567cf8c0f3446a7ea3a",
+            "goetas-webservices/xsd-reader": "0.2.*",
+            "goetas-webservices/xsd2php": "0.3.*",
             "illuminate/http": "~5.1",
             "illuminate/routing": "~5.1",
             "illuminate/view": "~5.1",

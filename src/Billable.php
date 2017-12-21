@@ -2,23 +2,15 @@
 
 namespace Laravel\CashierAuthorizeNet;
 
-use App\Organization;
-use Exception;
-use Money\Money;
 use Money\Currencies\ISOCurrencies;
 use Money\Currency;
 use Money\Formatter\DecimalMoneyFormatter;
-use Carbon\Carbon;
-use InvalidArgumentException;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Config;
-use Laravel\CashierAuthorizeNet\Requestor;
+use Money\Money;
 use net\authorize\api\contract\v1 as AnetAPI;
-use net\authorize\api\constants as AnetConstants;
+use net\authorize\api\contract\v1\GetCustomerProfileRequest;
+use net\authorize\api\contract\v1\TransactionRequestType;
 use net\authorize\api\controller as AnetController;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 trait Billable
 {
@@ -60,7 +52,7 @@ trait Billable
     /**
      * Create an Authorize customer for the given user.
      *
-     * @throws Exception
+     * @throws \Exception
      */
     public function initializeCustomerProfile()
     {
@@ -78,7 +70,7 @@ trait Billable
         $response   = $controller->executeWithApiResponse($requestor->env);
 
         if (is_null($response)) {
-            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
+            throw new \Exception("ERROR: NO RESPONSE", 500);
         }
 
         if ($response->getMessages()->getResultCode() !== "Ok") {
@@ -87,7 +79,7 @@ trait Billable
             throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
         }
 
-        $this->authorize_id = $response->getCustomerProfileId();
+        $this->authorize_id          = $response->getCustomerProfileId();
         $this->authorize_customer_id = $customerprofile->getMerchantCustomerId();
         $this->save();
     }
@@ -99,7 +91,7 @@ trait Billable
      *
      * @return integer payment profile ID
      *
-     * @throws Exception
+     * @throws \Exception
      */
     public function addPaymentMethodToCustomer($cardDetails, $options = [])
     {
@@ -136,7 +128,7 @@ trait Billable
         $response   = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
 
         if (is_null($response)) {
-            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
+            throw new \Exception("ERROR: NO RESPONSE", 500);
         }
 
         if ($response->getMessages()->getResultCode() !== "Ok") {
@@ -156,6 +148,12 @@ trait Billable
         return $response->getCustomerPaymentProfileId();
     }
 
+    /**
+     * @param string $profileId
+     *
+     * @return mixed
+     * @throws \Exception
+     */
     public function getCustomerProfileByProfileId($profileId = null)
     {
         $merchantAuthentication = $this->getMerchantAuthentication();
@@ -169,6 +167,12 @@ trait Billable
         return $profileSelected;
     }
 
+    /**
+     * @param string $email
+     *
+     * @return mixed
+     * @throws \Exception
+     */
     public function getCustomerProfileByEmail($email = null)
     {
         $merchantAuthentication = $this->getMerchantAuthentication();
@@ -176,16 +180,21 @@ trait Billable
         $request = new AnetAPI\GetCustomerProfileRequest();
         $request->setMerchantAuthentication($merchantAuthentication);
         $request->setEmail($email ?? $this->email);
-        $controller = new AnetController\GetCustomerProfileController($request);
 
         $profileSelected = self::getCustomerProfile($request);
 
         return $profileSelected;
     }
 
+    /**
+     * @param string $customerId
+     *
+     * @return mixed
+     * @throws \Exception
+     */
     public function getCustomerProfileByCustomerId($customerId = null)
     {
-        if (is_null($this->authorize_customer_id)){
+        if (is_null($this->authorize_customer_id)) {
             $this->initializeCustomerProfile();
         }
 
@@ -194,21 +203,26 @@ trait Billable
         $request = new AnetAPI\GetCustomerProfileRequest();
         $request->setMerchantAuthentication($merchantAuthentication);
         $request->setMerchantCustomerId($customerId ?? $this->authorize_customer_id);
-        $controller = new AnetController\GetCustomerProfileController($request);
 
         $profileSelected = self::getCustomerProfile($request);
 
         return $profileSelected;
     }
 
-    private static function getCustomerProfile($request)
+    /**
+     * @param GetCustomerProfileRequest $request
+     *
+     * @return mixed
+     * @throws \Exception
+     */
+    private static function getCustomerProfile(GetCustomerProfileRequest $request)
     {
         $controller = new AnetController\GetCustomerProfileController($request);
 
         $response = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
 
         if (is_null($response)) {
-            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
+            throw new \Exception("ERROR: NO RESPONSE", 500);
         }
 
         if ($response->getMessages()->getResultCode() !== "Ok") {
@@ -249,6 +263,12 @@ trait Billable
         return $paymentMethods;
     }
 
+    /**
+     * @param string $customerpaymentprofileid
+     *
+     * @return $this
+     * @throws \Exception
+     */
     public function deleteCustomerPaymentProfile($customerpaymentprofileid)
     {
         $merchantAuthentication = $this->getMerchantAuthentication();
@@ -262,7 +282,7 @@ trait Billable
         $response   = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
 
         if (is_null($response)) {
-            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
+            throw new \Exception("ERROR: NO RESPONSE", 500);
         }
 
         if ($response->getMessages()->getResultCode() !== "Ok") {
@@ -284,7 +304,7 @@ trait Billable
      * Delete an Authorize.net Profile
      *
      * @return bool
-     * @throws Exception
+     * @throws \Exception
      */
     public function deleteAuthorizeProfile()
     {
@@ -297,7 +317,7 @@ trait Billable
 
         if (is_null($response) || $response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
-            throw new Exception("Response : " . $errorMessages[0]->getCode() . "  " . $errorMessages[0]->getText(), 1);
+            throw new \Exception("Response : " . $errorMessages[0]->getCode() . "  " . $errorMessages[0]->getText(), 1);
         }
 
         return true;
@@ -311,7 +331,7 @@ trait Billable
      * @param  array $options
      *
      * @return array
-     * @throws Exception
+     * @throws \Exception
      */
     public function charge($amount, $paymentProfileId, array $options = [])
     {
@@ -342,7 +362,7 @@ trait Billable
         $response = self::buildAndExecuteRequest($transactionRequest);
 
         if (is_null($response)) {
-            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
+            throw new \Exception("ERROR: NO RESPONSE", 500);
         }
 
         if ($response->getMessages()->getResultCode() !== "Ok") {
@@ -363,7 +383,7 @@ trait Billable
         $tresponse = $response->getTransactionResponse();
 
         if (is_null($tresponse)) {
-            throw new Exception('ERROR: NO TRANSACTION RESPONSE', 1);
+            throw new \Exception('ERROR: NO TRANSACTION RESPONSE', 1);
         }
 
         switch ($tresponse->getResponseCode()) {
@@ -395,7 +415,7 @@ trait Billable
                 break;
 
             default:
-                throw new Exception('Unknown response code: ' . $tresponse->getResponseCode());
+                throw new \Exception('Unknown response code: ' . $tresponse->getResponseCode());
         }
 
         return [
@@ -427,7 +447,7 @@ trait Billable
         $response = $this->buildAndExecuteRequest($transactionRequest);
 
         if (is_null($response)) {
-            throw new Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));
+            throw new \Exception("ERROR: NO RESPONSE", 500);
         }
         if ($response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
@@ -447,7 +467,7 @@ trait Billable
         $tresponse = $response->getTransactionResponse();
 
         if (is_null($tresponse)) {
-            throw new Exception('ERROR: NO TRANSACTION RESPONSE', 1);
+            throw new \Exception('ERROR: NO TRANSACTION RESPONSE', 1);
         }
 
         if (is_null($tresponse->getErrors())) {
@@ -517,11 +537,13 @@ trait Billable
     }
 
     /**
-     * Get the Stripe supported currency used by the entity.
+     * Execute a given transaction request
+     *
+     * @param TransactionRequestType $transactionRequest
      *
      * @return string
      */
-    private static function buildAndExecuteRequest($transactionRequest)
+    private static function buildAndExecuteRequest(TransactionRequestType $transactionRequest)
     {
         $request = new AnetAPI\CreateTransactionRequest();
         $request->setRefId('ref' . time());
@@ -532,7 +554,6 @@ trait Billable
 
         $controller = new AnetController\CreateTransactionController($request);
 
-        /** @var AnetApiResponseType $response */
         return $controller->executeWithApiResponse($requestor->env);
     }
 }
