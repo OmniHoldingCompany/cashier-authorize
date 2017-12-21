@@ -79,9 +79,11 @@ trait Billable
             throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
         }
 
-        $this->authorize_id          = $response->getCustomerProfileId();
+        $authorizeId                 = $this->authorize_id = $response->getCustomerProfileId();
         $this->authorize_customer_id = $customerprofile->getMerchantCustomerId();
         $this->save();
+
+        return $authorizeId;
     }
 
     /**
@@ -194,10 +196,6 @@ trait Billable
      */
     public function getCustomerProfileByCustomerId($customerId = null)
     {
-        if (is_null($this->authorize_customer_id)) {
-            $this->initializeCustomerProfile();
-        }
-
         $merchantAuthentication = $this->getMerchantAuthentication();
 
         $request = new AnetAPI\GetCustomerProfileRequest();
