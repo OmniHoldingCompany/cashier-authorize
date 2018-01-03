@@ -54,12 +54,12 @@ trait Billable
      *
      * @throws \Exception
      */
-    public function initializeCustomerProfile()
+    public function initializeCustomerProfile($merchantId = null)
     {
         $this->setAuthorizeAccount();
 
         $customerprofile = new AnetAPI\CustomerProfileType();
-        $customerprofile->setMerchantCustomerId((string) rand(1000000000000, 1000000000000000000));
+        $customerprofile->setMerchantCustomerId($merchantId ?? $this->id);
         $customerprofile->setEmail($this->email);
 
         $requestor = new Requestor();
@@ -76,14 +76,78 @@ trait Billable
         if ($response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
 
-            throw new \Exception($errorMessages[0]->getText(), $errorMessages[0]->getCode());
+            throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getText(), 500);
         }
 
         $authorizeId                 = $this->authorize_id = $response->getCustomerProfileId();
-        $this->authorize_customer_id = $customerprofile->getMerchantCustomerId();
+        $this->authorize_merchant_id = $customerprofile->getMerchantCustomerId();
         $this->save();
 
         return $authorizeId;
+    }
+
+    /**
+     * Create an Authorize customer for the given user.
+     *
+     * @throws \Exception
+     */
+    public function updateCustomerEmail()
+    {
+        $this->setAuthorizeAccount();
+
+        $customerProfile = new AnetAPI\CustomerProfileExType();
+        $customerProfile->setCustomerProfileId($this->getAuthorizeId());
+
+        $customerProfile->setEmail($this->email);
+
+        $requestor = new Requestor();
+        $request   = $requestor->prepare(new AnetAPI\UpdateCustomerProfileRequest());
+        $request->setProfile($customerProfile);
+
+        $controller = new AnetController\UpdateCustomerProfileController($request);
+        $response   = $controller->executeWithApiResponse($requestor->env);
+
+        if (is_null($response)) {
+            throw new \Exception("ERROR: NO RESPONSE", 500);
+        }
+
+        if ($response->getMessages()->getResultCode() !== "Ok") {
+            $errorMessages = $response->getMessages()->getMessage();
+            throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getText(), 500);
+        }
+    }
+
+    /**
+     * Create an Authorize customer for the given user.
+     *
+     * @throws \Exception
+     */
+    public function syncMerchantId()
+    {
+        $this->setAuthorizeAccount();
+
+        $customerProfile = new AnetAPI\CustomerProfileExType();
+        $customerProfile->setCustomerProfileId($this->getAuthorizeId());
+
+        $customerProfile->setMerchantCustomerId($this->id);
+
+        $requestor = new Requestor();
+        $request   = $requestor->prepare(new AnetAPI\UpdateCustomerProfileRequest());
+        $request->setProfile($customerProfile);
+
+        $controller = new AnetController\UpdateCustomerProfileController($request);
+        $response   = $controller->executeWithApiResponse($requestor->env);
+
+        if (is_null($response)) {
+            throw new \Exception("ERROR: NO RESPONSE", 500);
+        }
+
+        if ($response->getMessages()->getResultCode() !== "Ok") {
+            $errorMessages = $response->getMessages()->getMessage();
+            throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getText(), 500);
+        }
+        $this->authorize_merchant_id = $customerProfile->getMerchantCustomerId();
+        $this->save();
     }
 
     /**
@@ -97,10 +161,6 @@ trait Billable
      */
     public function addPaymentMethodToCustomer($cardDetails, $options = [])
     {
-        if (!$this->authorize_id) {
-            $this->initializeCustomerProfile();
-        }
-
         $merchantAuthentication = $this->getMerchantAuthentication();
 
         $paymentDetails = self::getPaymentDetails($cardDetails);
@@ -121,7 +181,7 @@ trait Billable
         $paymentprofilerequest->setMerchantAuthentication($merchantAuthentication);
 
         // Add an existing profile id to the request
-        $paymentprofilerequest->setCustomerProfileId($this->authorize_id);
+        $paymentprofilerequest->setCustomerProfileId($this->getAuthorizeId());
         $paymentprofilerequest->setPaymentProfile($paymentprofile);
         //$paymentprofilerequest->setValidationMode("liveMode");
 
@@ -142,7 +202,7 @@ trait Billable
                     throw new BadRequestHttpException($errorMessages[0]->getText());
                     break;
                 default:
-                    throw new \Exception($errorMessages[0]->getText());
+                    throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getText());
                     break;
             }
         }
@@ -162,7 +222,7 @@ trait Billable
 
         $request = new AnetAPI\GetCustomerProfileRequest();
         $request->setMerchantAuthentication($merchantAuthentication);
-        $request->setCustomerProfileId($profileId ?? $this->authorize_id);
+        $request->setCustomerProfileId($profileId ?? $this->getAuthorizeId());
 
         $profileSelected = self::getCustomerProfile($request);
 
@@ -189,18 +249,18 @@ trait Billable
     }
 
     /**
-     * @param string $customerId
+     * @param string $merchantId
      *
      * @return mixed
      * @throws \Exception
      */
-    public function getCustomerProfileByCustomerId($customerId = null)
+    public function getCustomerProfileByMerchantId($merchantId = null)
     {
         $merchantAuthentication = $this->getMerchantAuthentication();
 
         $request = new AnetAPI\GetCustomerProfileRequest();
         $request->setMerchantAuthentication($merchantAuthentication);
-        $request->setMerchantCustomerId($customerId ?? $this->authorize_customer_id);
+        $request->setMerchantCustomerId($merchantId ?? $this->getAuthorizeMerchantId());
 
         $profileSelected = self::getCustomerProfile($request);
 
@@ -230,7 +290,7 @@ trait Billable
                     throw new BadRequestHttpException($errorMessages[0]->getText());
                     break;
                 default:
-                    throw new \Exception($errorMessages[0]->getText());
+                    throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getText());
                     break;
             }
         }
@@ -238,6 +298,59 @@ trait Billable
         $profileSelected = $response->getProfile();
 
         return $profileSelected;
+    }
+
+    public function getAuthorizeId()
+    {
+        if (is_null($this->authorize_id)) {
+            try {
+                $authorizeCustomerProfile = $this->getCustomerProfileByMerchantId();
+
+                $this->authorize_id = $authorizeCustomerProfile->getCustomerProfileId();
+                $this->save();
+            } catch (BadRequestHttpException $e) {
+                $this->initializeCustomerProfile();
+            }
+        }
+
+        return $this->authorize_id;
+    }
+
+    public function getAuthorizeMerchantId()
+    {
+        if (is_null($this->authorize_merchant_id)) {
+            try {
+                $authorizeCustomerProfile = $this->getCustomerProfileByEmail();
+
+                $this->authorize_merchant_id = $authorizeCustomerProfile->getMerchantCustomerId();
+                $this->save();
+            } catch (BadRequestHttpException $e) {
+                $this->initializeCustomerProfile();
+            }
+        }
+
+        return $this->authorize_merchant_id;
+    }
+
+    public function getAuthorizePaymentId()
+    {
+        if (is_null($this->authorize_payment_id)) {
+            if ($this->authorize_merchant_id !== $this->id) {
+                // Only grab the first payment profile if membership was migrated from ZingFit
+                $paymentProfiles = $this->getCustomerPaymentProfiles();
+                if (count($paymentProfiles) <= 0) {
+                    throw new \Exception('No payment profile available for membership renewal', 500);
+                }
+
+                $this->syncMerchantId();
+                $this->authorize_payment_id = $paymentProfiles[0]['id'];
+                $this->save();
+            } else {
+                throw new \Exception('Unable to find payment profile for membership renewal', 500);
+            }
+        }
+
+        return $this->authorize_payment_id;
     }
 
     public function getCustomerPaymentProfiles()
@@ -274,7 +387,7 @@ trait Billable
         // Use an existing payment profile ID for this Merchant name and Transaction key
         $request = new AnetAPI\DeleteCustomerPaymentProfileRequest();
         $request->setMerchantAuthentication($merchantAuthentication);
-        $request->setCustomerProfileId($this->authorize_id);
+        $request->setCustomerProfileId($this->getAuthorizeId());
         $request->setCustomerPaymentProfileId($customerpaymentprofileid);
         $controller = new AnetController\DeleteCustomerPaymentProfileController($request);
         $response   = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
@@ -290,7 +403,7 @@ trait Billable
                     throw new BadRequestHttpException($errorMessages[0]->getText());
                     break;
                 default:
-                    throw new \Exception($errorMessages[0]->getText());
+                    throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getText());
                     break;
             }
         }
@@ -308,14 +421,14 @@ trait Billable
     {
         $requestor = new Requestor();
         $request   = $requestor->prepare((new AnetAPI\DeleteCustomerProfileRequest()));
-        $request->setCustomerProfileId($this->authorize_id);
+        $request->setCustomerProfileId($this->getAuthorizeId());
 
         $controller = new AnetController\DeleteCustomerProfileController($request);
         $response   = $controller->executeWithApiResponse($requestor->env);
 
         if (is_null($response) || $response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
-            throw new \Exception("Response : " . $errorMessages[0]->getCode() . "  " . $errorMessages[0]->getText(), 1);
+            throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getText(), 500);
         }
 
         return true;
@@ -341,9 +454,8 @@ trait Billable
             'currency' => self::preferredCurrency(),
         ], $options);
 
-
         $profileToCharge = new AnetAPI\CustomerProfilePaymentType();
-        $profileToCharge->setCustomerProfileId($this->authorize_id);
+        $profileToCharge->setCustomerProfileId($this->getAuthorizeId());
         $paymentProfile = new AnetAPI\PaymentProfileType();
         $paymentProfile->setPaymentProfileId($paymentProfileId);
         $profileToCharge->setPaymentProfile($paymentProfile);
@@ -373,7 +485,7 @@ trait Billable
                     // Transaction error caught below
                     break;
                 default:
-                    throw new \Exception($errorMessages[0]->getText());
+                    throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getText());
                     break;
             }
         }
@@ -381,7 +493,7 @@ trait Billable
         $tresponse = $response->getTransactionResponse();
 
         if (is_null($tresponse)) {
-            throw new \Exception('ERROR: NO TRANSACTION RESPONSE', 1);
+            throw new \Exception('ERROR: NO TRANSACTION RESPONSE', 500);
         }
 
         switch ($tresponse->getResponseCode()) {
@@ -468,9 +580,10 @@ trait Billable
             throw new \Exception('ERROR: NO TRANSACTION RESPONSE', 1);
         }
 
+        $errorMessages = $tresponse->getErrors();
+
         if (is_null($tresponse->getErrors())) {
-            throw new \Exception($tresponse->getErrors()[0]->getErrorText(),
-                $tresponse->getErrors()[0]->getErrorCode());
+            throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getErrorText(), 500);
         }
 
         return $tresponse->getTransId();
