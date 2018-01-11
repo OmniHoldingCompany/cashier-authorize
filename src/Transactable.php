@@ -11,7 +11,7 @@ use net\authorize\api\contract\v1 as AnetAPI;
 use net\authorize\api\controller\CreateTransactionController;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
-trait Billable
+trait Transactable
 {
     protected function getMerchantAuthentication()
     {
