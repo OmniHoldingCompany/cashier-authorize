@@ -8,11 +8,25 @@ use net\authorize\api\constants\ANetEnvironment as ANetEnvironment;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 /**
- * Class AuthorizeCustomerProfile
+ * Class CustomerApi
  * @package Laravel\CashierAuthorizeNet
  */
-class AuthorizeCustomerProfile extends AuthorizeMerchant
+class CustomerApi extends AuthorizeApi
 {
+    /**
+     * Authorize.net authenticator
+     *
+     * @var AnetAPI\MerchantAuthenticationType
+     */
+    private $merchantAuthentication;
+
+    public function __construct()
+    {
+        $this->merchantAuthentication = new AnetAPI\MerchantAuthenticationType();
+        $this->merchantAuthentication->setName(getenv('ADN_API_LOGIN_ID'));
+        $this->merchantAuthentication->setTransactionKey(getenv('ADN_TRANSACTION_KEY'));
+    }
+
     /********************
      * CUSTOMER PROFILE *
      ********************/

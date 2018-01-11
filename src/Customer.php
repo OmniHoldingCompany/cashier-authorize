@@ -7,6 +7,11 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 trait Customer
 {
+    public function getCustomerApi()
+    {
+        return new CustomerApi();
+    }
+    
     /*********************
      * CUSTOMER PROFILES *
      *********************/
@@ -18,7 +23,7 @@ trait Customer
      */
     public function initializeCustomerProfile()
     {
-        $authorizeCustomerProfile = new AuthorizeCustomerProfile();
+        $authorizeCustomerProfile = $this->getCustomerApi();
         $authorizeCustomerId      = $authorizeCustomerProfile->createCustomerProfile([
             'email'                => $this->email,
             'merchant_customer_id' => $this->id,
@@ -39,7 +44,7 @@ trait Customer
      */
     public function getCustomerProfile()
     {
-        $authorizeCustomerProfile = new AuthorizeCustomerProfile();
+        $authorizeCustomerProfile = $this->getCustomerApi();
 
         return $authorizeCustomerProfile->getCustomerProfile(['customer_profile_id' => $this->getAuthorizeId()]);
     }
@@ -75,7 +80,7 @@ trait Customer
      */
     public function getCustomerProfileByMerchantId()
     {
-        $authorizeCustomerProfile = new AuthorizeCustomerProfile();
+        $authorizeCustomerProfile = $this->getCustomerApi();
 
         return $authorizeCustomerProfile->getCustomerProfile(['merchant_customer_id' => $this->getAuthorizeMerchantId()]);
     }
@@ -110,7 +115,7 @@ trait Customer
      */
     public function getCustomerProfileByEmail()
     {
-        $authorizeCustomerProfile = new AuthorizeCustomerProfile();
+        $authorizeCustomerProfile = $this->getCustomerApi();
 
         return $authorizeCustomerProfile->getCustomerProfile(['email' => $this->email]);
     }
@@ -118,14 +123,14 @@ trait Customer
     /**
      * Update this users customer profile.
      *
-     * @param array $data
+     * @param array $profileDetails
      *
      * @return mixed
      * @throws \Exception
      */
     public function updateCustomerProfile($profileDetails)
     {
-        $authorizeCustomerProfile = new AuthorizeCustomerProfile();
+        $authorizeCustomerProfile = $this->getCustomerApi();
 
         return $authorizeCustomerProfile->updateCustomerProfile($this->getAuthorizeId(), $profileDetails);
     }
@@ -137,7 +142,7 @@ trait Customer
      */
     public function deleteCustomerProfile()
     {
-        $authorizeCustomerProfile = new AuthorizeCustomerProfile();
+        $authorizeCustomerProfile = $this->getCustomerApi();
 
         if (!$authorizeCustomerProfile->deleteCustomerProfile($this->getAuthorizeId())) {
             throw new \Exception('Failed to delete authorize profile');
@@ -166,9 +171,11 @@ trait Customer
      */
     public function addCreditCard($cardDetails, $default = false)
     {
-        $paymentType = AuthorizeCustomerProfile::getCreditCardPaymentType($cardDetails);
+        $authorizeCustomerProfile = $this->getCustomerApi();
 
-        $billTo = AuthorizeCustomerProfile::getBillingObject([
+        $paymentType = $authorizeCustomerProfile::getCreditCardPaymentType($cardDetails);
+
+        $billTo = $authorizeCustomerProfile::getBillingObject([
             'first_name' => $this->first_name,
             'last_name'  => $this->last_name,
             'address_1'  => $this->address_1,
@@ -178,9 +185,8 @@ trait Customer
             'country'    => $this->country,
         ]);
 
-        $paymentProfile = AuthorizeCustomerProfile::buildPaymentProfile($paymentType, $billTo);
+        $paymentProfile = $authorizeCustomerProfile::buildPaymentProfile($paymentType, $billTo);
 
-        $authorizeCustomerProfile = new AuthorizeCustomerProfile();
         $paymentProfileId         = $authorizeCustomerProfile->addPaymentProfile($this->getAuthorizeId(), $paymentProfile);
 
         if ($default) {
@@ -196,11 +202,12 @@ trait Customer
      *
      * @param integer $paymentProfileId
      *
-     * @return AnetAPI\PaymentProfileMaskedType
+     * @return AnetAPI\CustomerPaymentProfileMaskedType
+     * @throws \Exception
      */
     public function getPaymentProfile($paymentProfileId)
     {
-        $authorizeCustomerProfile = new AuthorizeCustomerProfile();
+        $authorizeCustomerProfile = $this->getCustomerApi();
 
         return $authorizeCustomerProfile->getPaymentProfile($this->getAuthorizeId(), $paymentProfileId);
     }
@@ -254,6 +261,7 @@ trait Customer
      * List all of this users credit cards.
      *
      * @return array
+     * @throws \Exception
      */
     public function getCustomerCreditCards()
     {
@@ -266,6 +274,7 @@ trait Customer
      * List all of this users bank accounts.
      *
      * @return array
+     * @throws \Exception
      */
     public function getCustomerBankAccounts()
     {
@@ -279,12 +288,12 @@ trait Customer
      *
      * @param string $customerPaymentProfileId
      *
-     * @return $this
+     * @return bool
      * @throws \Exception
      */
     public function deleteCustomerPaymentProfile($customerPaymentProfileId)
     {
-        $authorizeCustomerProfile = new AuthorizeCustomerProfile();
+        $authorizeCustomerProfile = $this->getCustomerApi();
 
         return $authorizeCustomerProfile->deletePaymentProfile($this->getAuthorizeId(), $customerPaymentProfileId);
     }
