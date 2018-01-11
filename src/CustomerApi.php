@@ -328,6 +328,7 @@ class CustomerApi extends AuthorizeApi
             $errorMessages = $response->getMessages()->getMessage();
             switch ($errorMessages[0]->getCode()) {
                 case 'E00001': // An error occurred during processing. Please try again.
+                case 'E00013': // Customer Payment Profile ID is invalid.
                 case 'E00040': // The Record cannot be found.
                 case 'E00053': // The server is currently too busy, please try again later.
                 case 'E00104': // The server is in maintenance, so the requested method is unavailable, please try again later.
@@ -372,6 +373,7 @@ class CustomerApi extends AuthorizeApi
             $errorMessages = $response->getMessages()->getMessage();
             switch ($errorMessages[0]->getCode()) {
                 case 'E00001': // An error occurred during processing. Please try again.
+                case 'E00013': // Customer Payment Profile ID is invalid.
                 case 'E00040': // The Record cannot be found.
                 case 'E00053': // The server is currently too busy, please try again later.
                 case 'E00104': // The server is in maintenance, so the requested method is unavailable, please try again later.
