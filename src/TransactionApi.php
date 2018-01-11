@@ -15,7 +15,7 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
  * Class TransactionApi
  * @package Laravel\CashierAuthorizeNet
  */
-class TransactionApi extends AuthorizeApi
+class TransactionApi extends MerchantApi
 {
     public function __construct()
     {
@@ -101,31 +101,6 @@ class TransactionApi extends AuthorizeApi
     /********************
      * HELPER FUNCTIONS *
      ********************/
-
-    /**
-     * @param $cardDetails
-     *
-     * @return AnetAPI\PaymentType
-     * @deprecated
-     */
-    private static function getPaymentDetails($cardDetails)
-    {
-        $creditCard = new AnetAPI\CreditCardType();
-        $creditCard->setCardNumber($cardDetails['number']);
-
-        if ( ! empty($cardDetails['expiration'])) {
-            $creditCard->setExpirationDate($cardDetails['expiration']);
-        }
-
-        if ( ! empty($cardDetails['cvv'])) {
-            $creditCard->setCardCode($cardDetails['cvv']);
-        }
-
-        $paymentDetails = new AnetAPI\PaymentType();
-        $paymentDetails->setCreditCard($creditCard);
-
-        return $paymentDetails;
-    }
 
     /**
      * Convert pennies to dollars for Authorize.net
