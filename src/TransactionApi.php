@@ -64,6 +64,7 @@ class TransactionApi extends AuthorizeApi
         return [
             'authCode' => $transactionResponse->getAuthCode(),
             'transId'  => $transactionResponse->getTransId(),
+            'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
         ];
     }
 
@@ -112,11 +113,11 @@ class TransactionApi extends AuthorizeApi
         $creditCard = new AnetAPI\CreditCardType();
         $creditCard->setCardNumber($cardDetails['number']);
 
-        if (!empty($cardDetails['expiration'])) {
+        if ( ! empty($cardDetails['expiration'])) {
             $creditCard->setExpirationDate($cardDetails['expiration']);
         }
 
-        if (!empty($cardDetails['cvv'])) {
+        if ( ! empty($cardDetails['cvv'])) {
             $creditCard->setCardCode($cardDetails['cvv']);
         }
 
@@ -179,6 +180,7 @@ class TransactionApi extends AuthorizeApi
         if ($response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
             switch ($errorMessages[0]->getCode()) {
+                case 'E00013': // Customer Payment Profile ID is invalid.
                 case 'E00084':
                 case 'E00105':
                     throw new BadRequestHttpException($errorMessages[0]->getText());
@@ -198,10 +200,7 @@ class TransactionApi extends AuthorizeApi
             throw new \Exception('ERROR: NO TRANSACTION RESPONSE', 1);
         }
 
-        $transactionErrors = $transactionResponse->getErrors();
-        $transactionError  = $transactionErrors[0];
-
-        switch ($transactionError->getErrorCode()) {
+        switch ($transactionResponse->getResponseCode()) {
             case "1": // Success
                 break;
 
@@ -218,11 +217,13 @@ class TransactionApi extends AuthorizeApi
             case "4": // The code returned from the processor indicating that the card used needs to be picked up.
             case "6": // The credit card number is invalid.
             case "11": // A transaction with identical amount and credit card information was submitted within the previous two minutes.
-                throw new BadRequestHttpException($transactionError->getErrorText());
+                $transactionErrors = $transactionResponse->getErrors();
+                throw new BadRequestHttpException($transactionErrors[0]->getErrorText());
                 break;
 
             default:
-                throw new \Exception('Unknown response code: ' . $transactionResponse->getResponseCode() . ' - ' . $transactionError->getErrorText());
+                $transactionErrors = $transactionResponse->getErrors();
+                throw new \Exception('Unknown response code: ' . $transactionResponse->getResponseCode() . ' - ' . $transactionErrors[0]->getErrorText());
                 break;
         }
 
