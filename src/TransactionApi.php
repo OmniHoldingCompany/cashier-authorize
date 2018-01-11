@@ -17,24 +17,25 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
  */
 class TransactionApi extends AuthorizeApi
 {
+    public function __construct()
+    {
+        parent::__construct();
+    }
+
     /**
      * Make a "one off" charge on the customer for the given amount.
      *
-     * @param  integer $amount              Amount to be charged, in cents
-     * @param  integer $paymentProfileId
-     * @param  array   $options
+     * @param integer $pennies Amount to be charged, in cents
+     * @param integer $CustomerProfileId
+     * @param integer $paymentProfileId
+     * @param integer $invoiceId
+     * @param array   $options
      *
      * @return array
      * @throws \Exception
      */
-    public function charge($amount, $paymentProfileId, array $options = [])
+    public function charge($pennies, $CustomerProfileId, $paymentProfileId, $invoiceId = null, array $options = [])
     {
-        $user = $this->user;
-
-        if ($amount <= 0) {
-            throw new \Exception('Charge amount must be greater than 0');
-        }
-
         $options = array_merge([
             'currency' => self::preferredCurrency(),
         ], $options);
@@ -43,26 +44,69 @@ class TransactionApi extends AuthorizeApi
         $paymentProfile->setPaymentProfileId($paymentProfileId);
 
         $profileToCharge = new AnetAPI\CustomerProfilePaymentType();
-        $profileToCharge->setCustomerProfileId($user->getAuthorizeId());
+        $profileToCharge->setCustomerProfileId($CustomerProfileId);
         $profileToCharge->setPaymentProfile($paymentProfile);
 
         $order = new AnetAPI\OrderType;
-        $order->setDescription($options['description']);
+        $order->setDescription($options['description'] ?? null);
+        $order->setInvoiceNumber($invoiceId);
 
-        $transactionRequest = self::createTransactionRequest("authCaptureTransaction", $amount);
+        $transactionRequest = new AnetAPI\TransactionRequestType();
+        $transactionRequest->setTransactionType('authCaptureTransaction');
+        $transactionRequest->setAmount(self::convertPenniesToDollars($pennies));
 
         $transactionRequest->setCurrencyCode($options['currency']);
         $transactionRequest->setOrder($order);
         $transactionRequest->setProfile($profileToCharge);
 
-        $tresponse = $this->buildAndExecuteRequest($transactionRequest);
+        $transactionResponse = $this->buildAndExecuteRequest($transactionRequest);
 
         return [
-            'authCode' => $tresponse->getAuthCode(),
-            'transId'  => $tresponse->getTransId(),
+            'authCode' => $transactionResponse->getAuthCode(),
+            'transId'  => $transactionResponse->getTransId(),
         ];
     }
 
+    /**
+     * Refund money to a the credit card used in the transaction.
+     *
+     * @param integer $pennies Amount to be refunded, in cents
+     * @param integer $transactionId
+     * @param integer $lastFour
+     *
+     * @return integer
+     * @throws \Exception
+     */
+    public function refundTransaction($pennies, $transactionId, $lastFour)
+    {
+        $transactionRequest = new AnetAPI\TransactionRequestType();
+        $transactionRequest->setTransactionType('refundTransaction');
+        $transactionRequest->setAmount(self::convertPenniesToDollars($pennies));
+
+        $card = new AnetAPI\CreditCardType();
+        $card->setCardCode($lastFour);
+
+        $paymentDetails = new AnetAPI\PaymentType();
+        $paymentDetails->setCreditCard($card);
+
+        $transactionRequest->setRefTransId($transactionId);
+        $transactionRequest->setPayment($paymentDetails);
+
+        $transactionResponse = $this->buildAndExecuteRequest($transactionRequest);
+
+        return $transactionResponse->getTransId();
+    }
+
+    /********************
+     * HELPER FUNCTIONS *
+     ********************/
+
+    /**
+     * @param $cardDetails
+     *
+     * @return AnetAPI\PaymentType
+     * @deprecated
+     */
     private static function getPaymentDetails($cardDetails)
     {
         $creditCard = new AnetAPI\CreditCardType();
@@ -99,30 +143,13 @@ class TransactionApi extends AuthorizeApi
     }
 
     /**
-     * Get the Stripe supported currency used by the entity.
+     * Get the currency used by the entity.
      *
      * @return string
      */
     private static function preferredCurrency()
     {
         return Cashier::usesCurrency();
-    }
-
-    /**
-     * Get the Stripe supported currency used by the entity.
-     *
-     * @param string  $type
-     * @param integer $pennies
-     *
-     * @return string
-     */
-    private static function createTransactionRequest($type, $pennies)
-    {
-        $transactionRequest = new AnetAPI\TransactionRequestType();
-        $transactionRequest->setTransactionType($type);
-        $transactionRequest->setAmount(self::convertPenniesToDollars($pennies));
-
-        return $transactionRequest;
     }
 
     /**
@@ -135,15 +162,10 @@ class TransactionApi extends AuthorizeApi
      */
     private function buildAndExecuteRequest(AnetAPI\TransactionRequestType $transactionRequest)
     {
-        $merchantAuthentication = $this->getMerchantAuthentication();
-
         $request = new AnetAPI\CreateTransactionRequest();
         $request->setRefId('ref' . time());
         $request->setTransactionRequest($transactionRequest);
-        $request->setMerchantAuthentication($merchantAuthentication);
-
-        $requestor = new Requestor();
-        $requestor->prepare($request);
+        $request->setMerchantAuthentication($this->merchantAuthentication);
 
         $controller = new CreateTransactionController($request);
 
@@ -170,22 +192,20 @@ class TransactionApi extends AuthorizeApi
             }
         }
 
-        /** @var AnetAPI\TransactionResponseType $tresponse */
-        $tresponse = $response->getTransactionResponse();
+        $transactionResponse = $response->getTransactionResponse();
 
-        if (is_null($tresponse)) {
+        if (is_null($transactionResponse)) {
             throw new \Exception('ERROR: NO TRANSACTION RESPONSE', 1);
         }
 
-        switch ($tresponse->getResponseCode()) {
-            case "1":
-                // Success
+        $transactionErrors = $transactionResponse->getErrors();
+        $transactionError  = $transactionErrors[0];
+
+        switch ($transactionError->getErrorCode()) {
+            case "1": // Success
                 break;
 
-            case "2":
-                // General decline, no further details.
-                throw new BadRequestHttpException($tresponse->getResponseText());
-                break;
+            case "2": // General decline, no further details.
             case "3":
                 // A referral to a voice authorization center was received.
                 // Please call the appropriate number below for a voice authorization.
@@ -195,20 +215,17 @@ class TransactionApi extends AuthorizeApi
                 //   For JCB call : (800) 522-9345
                 //   For Visa/Mastercard call: (800) 228-1122
                 // Once an authorization is issued, you can then submit the transaction through your Virtual Terminal as a Capture Only transaction.
-                throw new BadRequestHttpException($tresponse->getResponseText() . ' Voice authorization required.');
-                break;
-            case "4":
-                throw new BadRequestHttpException($tresponse->getResponseText() . ' The code returned from the processor indicating that the card used needs to be picked up.');
-                break;
-            case "11":
-                // A transaction with identical amount and credit card information was submitted within the previous two minutes.
-                throw new BadRequestHttpException($tresponse->getResponseText());
+            case "4": // The code returned from the processor indicating that the card used needs to be picked up.
+            case "6": // The credit card number is invalid.
+            case "11": // A transaction with identical amount and credit card information was submitted within the previous two minutes.
+                throw new BadRequestHttpException($transactionError->getErrorText());
                 break;
 
             default:
-                throw new \Exception('Unknown response code: ' . $tresponse->getResponseCode());
+                throw new \Exception('Unknown response code: ' . $transactionResponse->getResponseCode() . ' - ' . $transactionError->getErrorText());
+                break;
         }
 
-        return $tresponse;
+        return $transactionResponse;
     }
 }

@@ -2,94 +2,79 @@
 
 namespace Laravel\CashierAuthorizeNet;
 
-use Money\Currencies\ISOCurrencies;
-use Money\Currency;
-use Money\Formatter\DecimalMoneyFormatter;
-use Money\Money;
-use net\authorize\api\constants\ANetEnvironment as ANetEnvironment;
-use net\authorize\api\contract\v1 as AnetAPI;
-use net\authorize\api\controller\CreateTransactionController;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
-
 trait Transactable
 {
+    public function getTransactionApi()
+    {
+        return new TransactionApi();
+    }
 
     /**
-     * Make a "one off" charge on the customer for the given amount.
+     * Make a "one off" charge on the customer for the transaction amount.
      *
-     * @param  integer $amount              Amount to be charged, in cents
-     * @param  integer $paymentProfileId
-     * @param  array   $options
+     * @param integer $paymentProfileId
      *
-     * @return array
+     * @return boolean
      * @throws \Exception
      */
-    public function charge($amount, $paymentProfileId, array $options = [])
+    public function charge($paymentProfileId)
     {
-        $user = $this->user;
+        $amount = $this->amount_due;
 
         if ($amount <= 0) {
             throw new \Exception('Charge amount must be greater than 0');
         }
 
-        $options = array_merge([
-            'currency' => self::preferredCurrency(),
-        ], $options);
+        $transactionApi = $this->getTransactionApi();
 
-        $paymentProfile = new AnetAPI\PaymentProfileType();
-        $paymentProfile->setPaymentProfileId($paymentProfileId);
+        $transactionDetails = $transactionApi->charge($amount, $this->user->authorize_id, $paymentProfileId);
 
-        $profileToCharge = new AnetAPI\CustomerProfilePaymentType();
-        $profileToCharge->setCustomerProfileId($user->getAuthorizeId());
-        $profileToCharge->setPaymentProfile($paymentProfile);
+        $this->payments()->save(new Payment([
+            'organization_id'   => $this->organization_id,
+            'payment_auth_code' => $transactionDetails['authCode'],
+            'payment_trans_id'  => $transactionDetails['transId'],
+            'amount'            => $amount,
+        ]));
 
-        $order = new AnetAPI\OrderType;
-        $order->setDescription($options['description']);
+        $this->payment_applied += $amount;
+        $this->amount_due      -= $amount;
+        $this->save();
 
-        $transactionRequest = self::createTransactionRequest("authCaptureTransaction", $amount);
-
-        $transactionRequest->setCurrencyCode($options['currency']);
-        $transactionRequest->setOrder($order);
-        $transactionRequest->setProfile($profileToCharge);
-
-        $tresponse = $this->buildAndExecuteRequest($transactionRequest);
-
-        return [
-            'authCode' => $tresponse->getAuthCode(),
-            'transId'  => $tresponse->getTransId(),
-        ];
+        return true;
     }
 
     /**
-     * Return money to a credit card.
+     * Return money to original credit card.
      *
-     * @param  integer $amount      Amount to be refunded, in dollars
-     * @param  array   $cardDetails Credit cards details (leave null for original card)
+     * @param  integer $pennies Amount to be refunded, in cents
      *
-     * @return integer ADN Transaction ID
+     * @return integer
      * @throws \Exception
      */
-    public function refund($amount, $cardDetails = null)
+    public function refund($pennies = null)
     {
-        if ($amount <= 0) {
+        if (is_null($pennies)) {
+            $pennies = $this->payment_applied - $this->refund;
+        }
+
+        if ($pennies <= 0) {
             throw new \Exception('Refund amount must be greater than 0');
         }
 
-        /** @var AnetAPI\TransactionRequestType $transactionRequest */
-        $transactionRequest = self::createTransactionRequest("refundTransaction", $amount);
+        $payment = $this->payment;
 
-        if (!is_null($cardDetails)) {
-            $paymentDetails = self::getPaymentDetails($cardDetails);
-        } else {
-            $payment         = $this->payments()->first();
-            $paymentDetails  = self::getPaymentDetails(['number' => $payment->last_four]);
-            $transactionRequest->setRefTransId($payment->payment_trans_id);
-        }
+        $transactionApi = $this->getTransactionApi();
+        $transactionId  = $transactionApi->refundTransaction($pennies, $payment->payment_trans_id, $payment->last_four);
 
-        $transactionRequest->setPayment($paymentDetails);
+        Refund::create([
+            'transaction_id'  => $this->id,
+            'amount'          => $pennies,
+            'refund_trans_id' => $transactionId,
+        ]);
 
-        $tresponse = $this->buildAndExecuteRequest($transactionRequest);
+        $this->refund += $pennies;
+        $this->save;
 
-        return $tresponse->getTransId();
+        return true;
     }
 }

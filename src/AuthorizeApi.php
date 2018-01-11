@@ -15,7 +15,7 @@ class AuthorizeApi
      *
      * @var AnetAPI\MerchantAuthenticationType
      */
-    private $merchantAuthentication;
+    protected $merchantAuthentication;
 
     public function __construct()
     {
