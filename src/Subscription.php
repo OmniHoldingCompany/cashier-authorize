@@ -4,15 +4,16 @@ namespace Laravel\CashierAuthorizeNet;
 
 use Exception;
 use Carbon\Carbon;
-use LogicException;
-use DateTimeInterface;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Database\Eloquent\Model;
-use Laravel\CashierAuthorizeNet\Requestor;
 use net\authorize\api\contract\v1 as AnetAPI;
-use net\authorize\api\constants as AnetConstants;
 use net\authorize\api\controller as AnetController;
 
+/**
+ * Class Subscription
+ * @package Laravel\CashierAuthorizeNet
+ * @deprecated
+ */
 class Subscription extends Model
 {
     /**

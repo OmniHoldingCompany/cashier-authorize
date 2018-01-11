@@ -9,6 +9,11 @@ use net\authorize\api\contract\v1 as AnetAPI;
 use Laravel\CashierAuthorizeNet\Subscription;
 use net\authorize\api\controller as AnetController;
 
+/**
+ * Class SubscriptionUpdateService
+ * @package Laravel\CashierAuthorizeNet\Console
+ * @deprecated
+ */
 class SubscriptionUpdateService
 {
     public function runUpdates()

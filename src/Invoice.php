@@ -7,6 +7,11 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\View;
 use Symfony\Component\HttpFoundation\Response;
 
+/**
+ * Class Invoice
+ * @package Laravel\CashierAuthorizeNet
+ * @deprecated
+ */
 class Invoice
 {
     /**

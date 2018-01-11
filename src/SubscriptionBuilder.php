@@ -6,11 +6,14 @@ use DateTime;
 use Exception;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Config;
-use Laravel\CashierAuthorizeNet\Requestor;
 use net\authorize\api\contract\v1 as AnetAPI;
-use net\authorize\api\constants as AnetConstants;
 use net\authorize\api\controller as AnetController;
 
+/**
+ * Class SubscriptionBuilder
+ * @package Laravel\CashierAuthorizeNet
+ * @deprecated
+ */
 class SubscriptionBuilder
 {
     /**

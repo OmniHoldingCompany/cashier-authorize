@@ -11,6 +11,11 @@ use Laravel\CashierAuthorizeNet\Subscription;
 use net\authorize\api\controller as AnetController;
 use Laravel\CashierAuthorizeNet\Console\SubscriptionUpdateService;
 
+/**
+ * Class SubscriptionUpdates
+ * @package Laravel\CashierAuthorizeNet\Console
+ * @deprecated
+ */
 class SubscriptionUpdates extends Command
 {
     /**
