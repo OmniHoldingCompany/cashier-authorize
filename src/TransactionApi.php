@@ -82,16 +82,37 @@ class TransactionApi extends MerchantApi
     {
         $transactionRequest = new AnetAPI\TransactionRequestType();
         $transactionRequest->setTransactionType('refundTransaction');
-        $transactionRequest->setAmount(self::convertPenniesToDollars($pennies));
 
         $card = new AnetAPI\CreditCardType();
-        $card->setCardCode($lastFour);
+        $card->setCardNumber($lastFour);
+        $card->setExpirationDate('XXXX');
 
         $paymentDetails = new AnetAPI\PaymentType();
         $paymentDetails->setCreditCard($card);
 
+        $transactionRequest->setAmount(self::convertPenniesToDollars($pennies));
         $transactionRequest->setRefTransId($transactionId);
         $transactionRequest->setPayment($paymentDetails);
+
+        $transactionResponse = $this->buildAndExecuteRequest($transactionRequest);
+
+        return $transactionResponse->getTransId();
+    }
+
+    /**
+     * Refund money to a the credit card used in the transaction.
+     *
+     * @param integer $transactionId
+     *
+     * @return integer
+     * @throws \Exception
+     */
+    public function voidTransaction($transactionId)
+    {
+        $transactionRequest = new AnetAPI\TransactionRequestType();
+        $transactionRequest->setTransactionType('voidTransaction');
+
+        $transactionRequest->setRefTransId($transactionId);
 
         $transactionResponse = $this->buildAndExecuteRequest($transactionRequest);
 
@@ -116,6 +137,20 @@ class TransactionApi extends MerchantApi
         $moneyFormatter = new DecimalMoneyFormatter($currencies);
 
         return $moneyFormatter->format($money);
+    }
+
+    /**
+     * Convert pennies to dollars for Authorize.net
+     *
+     * @param float $dollars
+     *
+     * @return float
+     */
+    public static function convertDollarsToPennies($dollars)
+    {
+        $pennies = $dollars * 100;
+
+        return $pennies;
     }
 
     /**
@@ -177,6 +212,7 @@ class TransactionApi extends MerchantApi
 
         switch ($transactionResponse->getResponseCode()) {
             case "1": // Success
+            case "4": // The code returned from the processor indicating that the card used needs to be picked up.
                 break;
 
             case "2": // General decline, no further details.
@@ -189,10 +225,10 @@ class TransactionApi extends MerchantApi
                 //   For JCB call : (800) 522-9345
                 //   For Visa/Mastercard call: (800) 228-1122
                 // Once an authorization is issued, you can then submit the transaction through your Virtual Terminal as a Capture Only transaction.
-            case "4": // The code returned from the processor indicating that the card used needs to be picked up.
             case "6": // The credit card number is invalid.
             case "11": // A transaction with identical amount and credit card information was submitted within the previous two minutes.
                 $transactionErrors = $transactionResponse->getErrors();
+                dump($transactionResponse);
                 throw new BadRequestHttpException($transactionErrors[0]->getErrorText());
                 break;
 

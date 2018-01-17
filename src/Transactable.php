@@ -2,6 +2,8 @@
 
 namespace Laravel\CashierAuthorizeNet;
 
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+
 trait Transactable
 {
     public function getTransactionApi()
@@ -45,10 +47,68 @@ trait Transactable
             throw new \Exception('Refund amount must be greater than 0');
         }
 
-        $payment = $this->payment;
+
+        $transactionDetails = $this->getDetails();
+
+        if (!in_array($transactionDetails['status'], ['settledSuccessfully'])) {
+            throw new BadRequestHttpException('Transaction must be settled before it can be refunded.  Void transaction instead.');
+        }
+
+        $payment = $this->last_payment;
 
         $transactionApi = $this->getTransactionApi();
 
         return $transactionApi->refundTransaction($pennies, $payment->payment_trans_id, $payment->last_four);
+    }
+
+    /**
+     * Void transaction if pending.
+     *
+     * @return integer
+     * @throws \Exception
+     */
+    public function void()
+    {
+        $transactionDetails = $this->getDetails();
+
+        if (!in_array($transactionDetails['status'], ['authorizedPendingCapture', 'capturedPendingSettlement', 'FDSPendingReview'])) {
+            throw new BadRequestHttpException('Transaction must be pending settlement in order to be voided.  Refund transaction instead.');
+        }
+
+        $payment = $this->last_payment;
+
+        $transactionApi = $this->getTransactionApi();
+
+        $transactionApi->voidTransaction($payment->adn_transaction_id);
+
+        $payment->status = 'voided';
+        $payment->save();
+
+        $this->status = 'void';
+        $this->save();
+
+        return true;
+    }
+
+    /**
+     * @return array
+     * @throws \Exception
+     */
+    public function getDetails()
+    {
+        $transactionApi = $this->getTransactionApi();
+
+        $payment = $this->last_payment;
+        $details = $transactionApi->getTransactionDetails($payment->adn_transaction_id);
+
+        return [
+            'status'            => $details->getTransactionStatus(),
+            'type'              => $details->getTransactionType(),
+            'fds_filter_action' => $details->getFDSFilterAction(),
+            'authorize_amount'  => $transactionApi::convertDollarsToPennies($details->getAuthAmount()),
+            'settle_amount'     => $transactionApi::convertDollarsToPennies($details->getSettleAmount()),
+            'submitted_at'      => $details->getSubmitTimeUTC(),
+            //'payment_profile_id' => $details->getPayment(),
+        ];
     }
 }
