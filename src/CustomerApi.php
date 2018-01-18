@@ -73,7 +73,7 @@ class CustomerApi extends MerchantApi
     /**
      * Retrieve an existing customer profile along with all the associated payment profiles and shipping addresses.
      *
-     * @param integer $customerDetails
+     * @param array $customerDetails
      *
      * @return AnetAPI\CustomerProfileMaskedType
      * @throws \Exception
