@@ -11,7 +11,7 @@ trait Customer
     {
         return new CustomerApi();
     }
-    
+
     /*********************
      * CUSTOMER PROFILES *
      *********************/
@@ -82,7 +82,10 @@ trait Customer
     {
         $authorizeCustomerProfile = $this->getCustomerApi();
 
-        return $authorizeCustomerProfile->getCustomerProfile(['merchant_customer_id' => $this->getAuthorizeMerchantId()]);
+        return $authorizeCustomerProfile->getCustomerProfile([
+            'merchant_customer_id' => $this->getAuthorizeMerchantId(),
+            'email'                => $this->email,
+        ]);
     }
 
     /**
@@ -187,7 +190,7 @@ trait Customer
 
         $paymentProfile = $authorizeCustomerProfile::buildPaymentProfile($paymentType, $billTo);
 
-        $paymentProfileId         = $authorizeCustomerProfile->addPaymentProfile($this->getAuthorizeId(), $paymentProfile);
+        $paymentProfileId = $authorizeCustomerProfile->addPaymentProfile($this->getAuthorizeId(), $paymentProfile);
 
         if ($default) {
             $this->authorize_payment_id = $paymentProfileId;
@@ -241,7 +244,7 @@ trait Customer
                     'expiration' => $card->getExpirationDate(),
                     'type'       => $card->getCardType(),
                 ];
-            } else if (isset($bankAccount)) {
+            } elseif (isset($bankAccount)) {
                 $paymentMethods['bank_accounts'][] = [
                     'id'              => $profile->getCustomerPaymentProfileId(),
                     'account_number'  => $bankAccount->getAccountNumber(),
