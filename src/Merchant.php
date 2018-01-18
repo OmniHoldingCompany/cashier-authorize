@@ -42,4 +42,25 @@ trait Merchant
 
         return new TransactionApi();
     }
+
+    /**
+     * Delete all customer data from merchant account and update user database to match.
+     *
+     * @throws \Exception
+     */
+    public function truncateCustomers()
+    {
+        $customerApi        = $this->getCustomerApi();
+        $customerProfileIds = $customerApi->listCustomerProfileIds();
+
+        foreach ($customerProfileIds as $customerProfileId) {
+            $customerApi->deleteCustomerProfile($customerProfileId);
+        }
+
+        $this->users()->update([
+            'authorize_merchant_id' => null,
+            'authorize_id'          => null,
+            'authorize_payment_id'  => null,
+        ]);
+    }
 }
