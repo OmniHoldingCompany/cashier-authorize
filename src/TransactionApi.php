@@ -181,7 +181,7 @@ class TransactionApi extends MerchantApi
         $controller = new CreateTransactionController($request);
 
         /** @var AnetAPI\CreateTransactionResponse $response */
-        $response = $controller->executeWithApiResponse(ANetEnvironment::SANDBOX);
+        $response = $controller->executeWithApiResponse($this->apiEndpoint);
 
         if (is_null($response)) {
             throw new \Exception("ERROR: NO RESPONSE", config('app.response_codes.server_error'));

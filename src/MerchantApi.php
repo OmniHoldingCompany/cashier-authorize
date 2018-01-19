@@ -20,11 +20,20 @@ class MerchantApi
      */
     protected $merchantAuthentication;
 
+    /**
+     * Authorize.net API URL
+     *
+     * @var string
+     */
+    protected $apiEndpoint;
+
     public function __construct()
     {
         $this->merchantAuthentication = new AnetAPI\MerchantAuthenticationType();
         $this->merchantAuthentication->setName(getenv('ADN_API_LOGIN_ID'));
         $this->merchantAuthentication->setTransactionKey(getenv('ADN_TRANSACTION_KEY'));
+
+        $this->apiEndpoint = getenv('APP_ENV') === 'production' ? ANetEnvironment::PRODUCTION : ANetEnvironment::SANDBOX;
     }
 
     /**
@@ -41,7 +50,7 @@ class MerchantApi
         $controller = new AnetController\GetCustomerProfileIdsController($request);
 
         /** @var AnetAPI\GetCustomerProfileIdsResponse $response */
-        $response = $controller->executeWithApiResponse(ANetEnvironment::SANDBOX);
+        $response = $controller->executeWithApiResponse($this->apiEndpoint);
 
         if (is_null($response)) {
             throw new \Exception("ERROR: NO RESPONSE", 500);
@@ -79,7 +88,7 @@ class MerchantApi
         $controller = new AnetController\GetTransactionDetailsController($request);
 
         /** @var AnetAPI\GetTransactionDetailsResponse $response */
-        $response = $controller->executeWithApiResponse(ANetEnvironment::SANDBOX);
+        $response = $controller->executeWithApiResponse($this->apiEndpoint);
 
         if (is_null($response)) {
             throw new \Exception("ERROR: NO RESPONSE", 500);

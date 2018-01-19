@@ -46,7 +46,7 @@ class CustomerApi extends MerchantApi
         $controller = new AnetController\CreateCustomerProfileController($request);
 
         /** @var AnetAPI\CreateCustomerPaymentProfileResponse $response */
-        $response = $controller->executeWithApiResponse(ANetEnvironment::SANDBOX);
+        $response = $controller->executeWithApiResponse($this->apiEndpoint);
 
         if (is_null($response)) {
             throw new \Exception("ERROR: NO RESPONSE", 500);
@@ -96,7 +96,7 @@ class CustomerApi extends MerchantApi
         $controller = new AnetController\GetCustomerProfileController($request);
 
         /** @var AnetAPI\GetCustomerProfileResponse $response */
-        $response = $controller->executeWithApiResponse(ANetEnvironment::SANDBOX);
+        $response = $controller->executeWithApiResponse($this->apiEndpoint);
 
         if (is_null($response)) {
             throw new \Exception("ERROR: NO RESPONSE", 500);
@@ -144,7 +144,7 @@ class CustomerApi extends MerchantApi
         $controller = new AnetController\UpdateCustomerProfileController($request);
 
         /** @var AnetAPI\UpdateCustomerPaymentProfileResponse $response */
-        $response = $controller->executeWithApiResponse(ANetEnvironment::SANDBOX);
+        $response = $controller->executeWithApiResponse($this->apiEndpoint);
 
         if (is_null($response)) {
             throw new \Exception("ERROR: NO RESPONSE", 500);
@@ -186,7 +186,7 @@ class CustomerApi extends MerchantApi
         $controller = new AnetController\DeleteCustomerProfileController($request);
 
         /** @var AnetAPI\UpdateCustomerPaymentProfileResponse $response */
-        $response = $controller->executeWithApiResponse(ANetEnvironment::SANDBOX);
+        $response = $controller->executeWithApiResponse($this->apiEndpoint);
 
         if (is_null($response)) {
             throw new \Exception("ERROR: NO RESPONSE", 500);
@@ -234,7 +234,7 @@ class CustomerApi extends MerchantApi
         $controller = new AnetController\CreateCustomerPaymentProfileController($paymentProfileRequest);
 
         /** @var AnetAPI\CreateCustomerPaymentProfileResponse $response */
-        $response = $controller->executeWithApiResponse(ANetEnvironment::SANDBOX);
+        $response = $controller->executeWithApiResponse($this->apiEndpoint);
 
         if (is_null($response)) {
             throw new \Exception("ERROR: NO RESPONSE", 500);
@@ -282,7 +282,7 @@ class CustomerApi extends MerchantApi
         $controller = new AnetController\GetCustomerPaymentProfileController($request);
 
         /** @var AnetAPI\GetCustomerPaymentProfileResponse $response */
-        $response = $controller->executeWithApiResponse(ANetEnvironment::SANDBOX);
+        $response = $controller->executeWithApiResponse($this->apiEndpoint);
 
         if (is_null($response)) {
             throw new \Exception("ERROR: NO RESPONSE", 500);
@@ -327,7 +327,7 @@ class CustomerApi extends MerchantApi
         $controller = new AnetController\DeleteCustomerPaymentProfileController($request);
 
         /** @var AnetAPI\DeleteCustomerPaymentProfileResponse $response */
-        $response = $controller->executeWithApiResponse(ANetEnvironment::SANDBOX);
+        $response = $controller->executeWithApiResponse($this->apiEndpoint);
 
         if (is_null($response)) {
             throw new \Exception("ERROR: NO RESPONSE", 500);
