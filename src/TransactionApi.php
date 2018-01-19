@@ -228,7 +228,6 @@ class TransactionApi extends MerchantApi
             case "6": // The credit card number is invalid.
             case "11": // A transaction with identical amount and credit card information was submitted within the previous two minutes.
                 $transactionErrors = $transactionResponse->getErrors();
-                dump($transactionResponse);
                 throw new BadRequestHttpException($transactionErrors[0]->getErrorText());
                 break;
 
