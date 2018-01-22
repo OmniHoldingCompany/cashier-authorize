@@ -25,6 +25,51 @@ class TransactionApi extends MerchantApi
      * Make a "one off" charge on the customer for the given amount.
      *
      * @param integer $pennies Amount to be charged, in cents
+     * @param array   $cardTrack
+     * @param integer $invoiceId
+     * @param array   $options
+     *
+     * @return array
+     * @throws \Exception
+     */
+    public function chargeTrack($pennies, $cardTrack, $invoiceId = null, array $options = [])
+    {
+        $options = array_merge([
+            'currency' => self::preferredCurrency(),
+        ], $options);
+
+        $creditCardTrackType = new AnetAPI\CreditCardTrackType();
+        $creditCardTrackType->setTrack1($cardTrack[0]);
+        $creditCardTrackType->setTrack2($cardTrack[1]);
+
+        $payment = new AnetAPI\PaymentType();
+        $payment->setTrackData($creditCardTrackType);
+
+        $order = new AnetAPI\OrderType;
+        $order->setDescription($options['description'] ?? null);
+        $order->setInvoiceNumber($invoiceId);
+
+        $transactionRequest = new AnetAPI\TransactionRequestType();
+        $transactionRequest->setTransactionType('authCaptureTransaction');
+        $transactionRequest->setAmount(self::convertPenniesToDollars($pennies));
+
+        $transactionRequest->setCurrencyCode($options['currency']);
+        $transactionRequest->setOrder($order);
+        $transactionRequest->setPayment($payment);
+
+        $transactionResponse = $this->buildAndExecuteRequest($transactionRequest);
+
+        return [
+            'authCode' => $transactionResponse->getAuthCode(),
+            'transId'  => $transactionResponse->getTransId(),
+            'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
+        ];
+    }
+
+    /**
+     * Make a "one off" charge on the customer for the given amount.
+     *
+     * @param integer $pennies Amount to be charged, in cents
      * @param integer $CustomerProfileId
      * @param integer $paymentProfileId
      * @param integer $invoiceId

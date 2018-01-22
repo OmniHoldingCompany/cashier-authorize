@@ -34,6 +34,28 @@ trait Transactable
     }
 
     /**
+     * Make a "card-present" charge for the transaction amount.
+     *
+     * @param integer $pennies
+     * @param array   $trackDetails
+     *
+     * @return array
+     * @throws \Exception
+     */
+    public function chargeCard($pennies, $trackDetails)
+    {
+        if ($pennies <= 0) {
+            throw new \Exception('Charge amount must be greater than 0');
+        }
+
+        $transactionApi = $this->getTransactionApi();
+
+        $transactionDetails = $transactionApi->chargeTrack($pennies, $trackDetails);
+
+        return $transactionDetails;
+    }
+
+    /**
      * Return money to original credit card.
      *
      * @param  integer $pennies Amount to be refunded, in cents
