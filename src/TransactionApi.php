@@ -6,7 +6,6 @@ use Money\Currencies\ISOCurrencies;
 use Money\Currency;
 use Money\Formatter\DecimalMoneyFormatter;
 use Money\Money;
-use net\authorize\api\constants\ANetEnvironment;
 use net\authorize\api\contract\v1 as AnetAPI;
 use net\authorize\api\controller\CreateTransactionController;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;

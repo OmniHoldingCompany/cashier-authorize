@@ -4,7 +4,6 @@ namespace Laravel\CashierAuthorizeNet;
 
 use net\authorize\api\contract\v1 as AnetAPI;
 use net\authorize\api\controller as AnetController;
-use net\authorize\api\constants\ANetEnvironment as ANetEnvironment;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 /**
@@ -435,13 +434,13 @@ class CustomerApi extends MerchantApi
     {
         $billTo = new AnetAPI\CustomerAddressType();
 
-        $billTo->setFirstName($billingDetails['first_name']);
-        $billTo->setLastName($billingDetails['last_name']);
-        $billTo->setAddress($billingDetails['address_1']);
-        $billTo->setCity($billingDetails['city']);
-        $billTo->setState($billingDetails['state']);
-        $billTo->setZip($billingDetails['zip']);
-        $billTo->setCountry($billingDetails['country']);
+        $billTo->setFirstName($billingDetails['first_name'] ?? null);
+        $billTo->setLastName($billingDetails['last_name'] ?? null);
+        $billTo->setAddress($billingDetails['address_1'] ?? null);
+        $billTo->setCity($billingDetails['city'] ?? null);
+        $billTo->setState($billingDetails['state'] ?? null);
+        $billTo->setZip($billingDetails['zip'] ?? null);
+        $billTo->setCountry($billingDetails['country'] ?? null);
 
         return $billTo;
     }
