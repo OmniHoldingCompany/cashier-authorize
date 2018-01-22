@@ -37,7 +37,7 @@ trait Transactable
      * Make a "card-present" charge for the transaction amount.
      *
      * @param integer $pennies
-     * @param array   $trackDetails
+     * @param string  $trackDetails
      *
      * @return array
      * @throws \Exception

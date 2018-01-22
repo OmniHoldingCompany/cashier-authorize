@@ -25,22 +25,21 @@ class TransactionApi extends MerchantApi
      * Make a "one off" charge on the customer for the given amount.
      *
      * @param integer $pennies Amount to be charged, in cents
-     * @param array   $cardTrack
+     * @param string  $track1
      * @param integer $invoiceId
      * @param array   $options
      *
      * @return array
      * @throws \Exception
      */
-    public function chargeTrack($pennies, $cardTrack, $invoiceId = null, array $options = [])
+    public function chargeTrack($pennies, $track1, $invoiceId = null, array $options = [])
     {
         $options = array_merge([
             'currency' => self::preferredCurrency(),
         ], $options);
 
         $creditCardTrackType = new AnetAPI\CreditCardTrackType();
-        $creditCardTrackType->setTrack1($cardTrack[0]);
-        $creditCardTrackType->setTrack2($cardTrack[1]);
+        $creditCardTrackType->setTrack1($track1);
 
         $payment = new AnetAPI\PaymentType();
         $payment->setTrackData($creditCardTrackType);
@@ -49,9 +48,13 @@ class TransactionApi extends MerchantApi
         $order->setDescription($options['description'] ?? null);
         $order->setInvoiceNumber($invoiceId);
 
+        $retail = new AnetAPI\TransRetailInfoType;
+        $retail->setMarketType(2);
+
         $transactionRequest = new AnetAPI\TransactionRequestType();
         $transactionRequest->setTransactionType('authCaptureTransaction');
         $transactionRequest->setAmount(self::convertPenniesToDollars($pennies));
+        $transactionRequest->setRetail($retail);
 
         $transactionRequest->setCurrencyCode($options['currency']);
         $transactionRequest->setOrder($order);
