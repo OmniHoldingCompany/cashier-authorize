@@ -23,8 +23,8 @@ trait Customer
      */
     public function initializeCustomerProfile()
     {
-        $authorizeCustomerProfile = $this->getCustomerApi();
-        $authorizeCustomerId      = $authorizeCustomerProfile->createCustomerProfile([
+        $customerApi         = $this->getCustomerApi();
+        $authorizeCustomerId = $customerApi->createCustomerProfile([
             'email'                => $this->email,
             'merchant_customer_id' => $this->id,
         ]);
@@ -33,7 +33,7 @@ trait Customer
         $this->authorize_merchant_id = $this->id;
         $this->save();
 
-        return $authorizeCustomerId;
+        return $this->getCustomerProfile();
     }
 
     /**
@@ -44,9 +44,9 @@ trait Customer
      */
     public function getCustomerProfile()
     {
-        $authorizeCustomerProfile = $this->getCustomerApi();
+        $customerApi = $this->getCustomerApi();
 
-        return $authorizeCustomerProfile->getCustomerProfile(['customer_profile_id' => $this->getAuthorizeId()]);
+        return $customerApi->getCustomerProfile(['customer_profile_id' => $this->getAuthorizeId()]);
     }
 
     /**
@@ -58,15 +58,11 @@ trait Customer
     public function getAuthorizeId()
     {
         if (is_null($this->authorize_id)) {
-            try {
-                /** @var AnetAPI\CustomerProfileMaskedType $authorizeCustomerProfile */
-                $authorizeCustomerProfile = $this->getCustomerProfileByMerchantId();
+            /** @var AnetAPI\CustomerProfileMaskedType $authorizeCustomerProfile */
+            $authorizeCustomerProfile = $this->getCustomerProfileByMerchantId();
 
-                $this->authorize_id = $authorizeCustomerProfile->getCustomerProfileId();
-                $this->save();
-            } catch (BadRequestHttpException $e) {
-                $this->initializeCustomerProfile();
-            }
+            $this->authorize_id = $authorizeCustomerProfile->getCustomerProfileId();
+            $this->save();
         }
 
         return $this->authorize_id;
@@ -80,12 +76,17 @@ trait Customer
      */
     public function getCustomerProfileByMerchantId()
     {
-        $authorizeCustomerProfile = $this->getCustomerApi();
+        $customerApi = $this->getCustomerApi();
 
-        return $authorizeCustomerProfile->getCustomerProfile([
-            'merchant_customer_id' => $this->getAuthorizeMerchantId(),
-            'email'                => $this->email,
-        ]);
+        try {
+            $authorizeCustomerProfile = $customerApi->getCustomerProfile([
+                'merchant_customer_id' => $this->getAuthorizeMerchantId()
+            ]);
+        } catch (BadRequestHttpException $e) {
+            $authorizeCustomerProfile = $this->getCustomerProfileByEmail();
+        }
+
+        return $authorizeCustomerProfile;
     }
 
     /**
@@ -97,14 +98,10 @@ trait Customer
     public function getAuthorizeMerchantId()
     {
         if (is_null($this->authorize_merchant_id)) {
-            try {
-                $authorizeCustomerProfile = $this->getCustomerProfileByEmail();
+            $authorizeCustomerProfile = $this->getCustomerProfileByEmail();
 
-                $this->authorize_merchant_id = $authorizeCustomerProfile->getMerchantCustomerId();
-                $this->save();
-            } catch (BadRequestHttpException $e) {
-                $this->initializeCustomerProfile();
-            }
+            $this->authorize_merchant_id = $authorizeCustomerProfile->getMerchantCustomerId();
+            $this->save();
         }
 
         return $this->authorize_merchant_id;
@@ -118,9 +115,17 @@ trait Customer
      */
     public function getCustomerProfileByEmail()
     {
-        $authorizeCustomerProfile = $this->getCustomerApi();
+        $customerApi = $this->getCustomerApi();
 
-        return $authorizeCustomerProfile->getCustomerProfile(['email' => $this->email]);
+        try {
+            $authorizeCustomerProfile = $customerApi->getCustomerProfile([
+                'email' => $this->email,
+            ]);
+        } catch (BadRequestHttpException $e) {
+            $authorizeCustomerProfile = $this->initializeCustomerProfile();
+        }
+
+        return $authorizeCustomerProfile;
     }
 
     /**
@@ -133,9 +138,9 @@ trait Customer
      */
     public function updateCustomerProfile($profileDetails)
     {
-        $authorizeCustomerProfile = $this->getCustomerApi();
+        $customerApi = $this->getCustomerApi();
 
-        return $authorizeCustomerProfile->updateCustomerProfile($this->getAuthorizeId(), $profileDetails);
+        return $customerApi->updateCustomerProfile($this->getAuthorizeId(), $profileDetails);
     }
 
     /**
@@ -145,9 +150,9 @@ trait Customer
      */
     public function deleteCustomerProfile()
     {
-        $authorizeCustomerProfile = $this->getCustomerApi();
+        $customerApi = $this->getCustomerApi();
 
-        if (!$authorizeCustomerProfile->deleteCustomerProfile($this->getAuthorizeId())) {
+        if (!$customerApi->deleteCustomerProfile($this->getAuthorizeId())) {
             throw new \Exception('Failed to delete authorize profile');
         }
 
@@ -174,15 +179,15 @@ trait Customer
      */
     public function addCreditCard($cardDetails, $default = false)
     {
-        $authorizeCustomerProfile = $this->getCustomerApi();
+        $customerApi = $this->getCustomerApi();
 
-        $paymentType = $authorizeCustomerProfile::getCreditCardPaymentType($cardDetails);
+        $paymentType = $customerApi::getCreditCardPaymentType($cardDetails);
 
-        $billTo = $authorizeCustomerProfile::getBillingObject($cardDetails);
+        $billTo = $customerApi::getBillingObject($cardDetails);
 
-        $paymentProfile = $authorizeCustomerProfile::buildPaymentProfile($paymentType, $billTo);
+        $paymentProfile = $customerApi::buildPaymentProfile($paymentType, $billTo);
 
-        $paymentProfileId = $authorizeCustomerProfile->addPaymentProfile($this->getAuthorizeId(), $paymentProfile);
+        $paymentProfileId = $customerApi->addPaymentProfile($this->getAuthorizeId(), $paymentProfile);
 
         if ($default) {
             $this->authorize_payment_id = $paymentProfileId;
@@ -202,9 +207,9 @@ trait Customer
      */
     public function getPaymentProfile($paymentProfileId)
     {
-        $authorizeCustomerProfile = $this->getCustomerApi();
+        $customerApi = $this->getCustomerApi();
 
-        return $authorizeCustomerProfile->getPaymentProfile($this->getAuthorizeId(), $paymentProfileId);
+        return $customerApi->getPaymentProfile($this->getAuthorizeId(), $paymentProfileId);
     }
 
     /**
@@ -288,8 +293,8 @@ trait Customer
      */
     public function deleteCustomerPaymentProfile($customerPaymentProfileId)
     {
-        $authorizeCustomerProfile = $this->getCustomerApi();
+        $customerApi = $this->getCustomerApi();
 
-        return $authorizeCustomerProfile->deletePaymentProfile($this->getAuthorizeId(), $customerPaymentProfileId);
+        return $customerApi->deletePaymentProfile($this->getAuthorizeId(), $customerPaymentProfileId);
     }
 }
