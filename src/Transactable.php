@@ -30,7 +30,16 @@ trait Transactable
 
         $transactionDetails = $transactionApi->charge($pennies, $this->user->authorize_id, $paymentProfileId);
 
-        return $transactionDetails;
+        $authorizeTransaction = $this->authorizeTransactions()->create([
+            'organization_id'        => $this->organization_id,
+            'adn_authorization_code' => $transactionDetails['authCode'],
+            'adn_transaction_id'     => $transactionDetails['transId'],
+            'last_four'              => $transactionDetails['lastFour'],
+            'amount'                 => $transactionApi::convertDollarsToPennies($transactionDetails['amount']),
+            'type'                   => 'payment',
+        ]);
+
+        return $authorizeTransaction;
     }
 
     /**
@@ -52,7 +61,18 @@ trait Transactable
 
         $transactionDetails = $transactionApi->chargeTrack($pennies, $trackDetails);
 
-        return $transactionDetails;
+        $amount = $transactionApi::convertDollarsToPennies($transactionDetails['amount']);
+
+        $authorizeTransaction = $this->authorizeTransactions()->create([
+            'organization_id'        => $this->organization_id,
+            'adn_authorization_code' => $transactionDetails['authCode'],
+            'adn_transaction_id'     => $transactionDetails['transId'],
+            'last_four'              => $transactionDetails['lastFour'],
+            'amount'                 => $transactionApi::convertDollarsToPennies($transactionDetails['amount']),
+            'type'                   => 'payment',
+        ]);
+
+        return $authorizeTransaction;
     }
 
     /**

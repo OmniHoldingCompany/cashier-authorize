@@ -66,6 +66,7 @@ class TransactionApi extends MerchantApi
             'authCode' => $transactionResponse->getAuthCode(),
             'transId'  => $transactionResponse->getTransId(),
             'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
+            'amount'   => $transactionRequest->getAmount(),
         ];
     }
 
@@ -112,6 +113,7 @@ class TransactionApi extends MerchantApi
             'authCode' => $transactionResponse->getAuthCode(),
             'transId'  => $transactionResponse->getTransId(),
             'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
+            'amount'   => $transactionRequest->getAmount(),
         ];
     }
 
