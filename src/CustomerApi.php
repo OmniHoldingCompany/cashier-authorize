@@ -5,6 +5,7 @@ namespace Laravel\CashierAuthorizeNet;
 use net\authorize\api\contract\v1 as AnetAPI;
 use net\authorize\api\controller as AnetController;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Class CustomerApi
@@ -104,8 +105,10 @@ class CustomerApi extends MerchantApi
         if ($response->getMessages()->getResultCode() !== "Ok") {
             $errorMessages = $response->getMessages()->getMessage();
             switch ($errorMessages[0]->getCode()) {
-                case 'E00001': // An error occurred during processing. Please try again.
+                case 'E00039': // Multiple records found. Please refine search options.
                 case 'E00040': // The Record cannot be found.
+                    throw new NotFoundHttpException($errorMessages[0]->getText());
+                case 'E00001': // An error occurred during processing. Please try again.
                 case 'E00053': // The server is currently too busy, please try again later.
                 case 'E00104': // The server is in maintenance, so the requested method is unavailable, please try again later.
                     throw new BadRequestHttpException($errorMessages[0]->getText());
@@ -228,7 +231,6 @@ class CustomerApi extends MerchantApi
         $paymentProfileRequest->setMerchantAuthentication($this->merchantAuthentication);
         $paymentProfileRequest->setCustomerProfileId($customerProfileId);
         $paymentProfileRequest->setPaymentProfile($paymentProfile);
-        //$paymentProfileRequest->setValidationMode("liveMode");
 
         $controller = new AnetController\CreateCustomerPaymentProfileController($paymentProfileRequest);
 
