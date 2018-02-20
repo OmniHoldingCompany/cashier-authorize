@@ -88,7 +88,6 @@ trait Transactable
             throw new \Exception('Refund amount must be greater than 0');
         }
 
-
         $transactionDetails = $this->getDetails();
 
         if (!in_array($transactionDetails['status'], ['settledSuccessfully'])) {
@@ -131,10 +130,7 @@ trait Transactable
         $payment = $this->last_payment;
 
         $transactionApi = $this->getTransactionApi();
-        $transaction = $transactionApi->voidTransaction($payment->adn_transaction_id);
-
-        $payment->status = $transaction['type'];
-        $payment->save();
+        $transactionApi->voidTransaction($payment->adn_transaction_id);
 
         $this->status = 'void';
         $this->save();
@@ -160,7 +156,6 @@ trait Transactable
             'authorize_amount'  => $transactionApi::convertDollarsToPennies($details->getAuthAmount()),
             'settle_amount'     => $transactionApi::convertDollarsToPennies($details->getSettleAmount()),
             'submitted_at'      => $details->getSubmitTimeUTC(),
-            //'payment_profile_id' => $details->getPayment(),
         ];
     }
 }
