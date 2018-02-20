@@ -2,6 +2,7 @@
 
 namespace Laravel\CashierAuthorizeNet;
 
+use App\AuthorizeTransaction;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 trait Transactable
@@ -35,8 +36,8 @@ trait Transactable
             'adn_authorization_code' => $transactionDetails['authCode'],
             'adn_transaction_id'     => $transactionDetails['transId'],
             'last_four'              => $transactionDetails['lastFour'],
-            'amount'                 => $transactionApi::convertDollarsToPennies($transactionDetails['amount']),
-            'type'                   => 'payment',
+            'amount'                 => $pennies,
+            'type'                   => $transactionDetails['type'],
         ]);
 
         return $authorizeTransaction;
@@ -61,15 +62,13 @@ trait Transactable
 
         $transactionDetails = $transactionApi->chargeTrack($pennies, $trackDetails);
 
-        $amount = $transactionApi::convertDollarsToPennies($transactionDetails['amount']);
-
         $authorizeTransaction = $this->authorizeTransactions()->create([
             'organization_id'        => $this->organization_id,
             'adn_authorization_code' => $transactionDetails['authCode'],
             'adn_transaction_id'     => $transactionDetails['transId'],
             'last_four'              => $transactionDetails['lastFour'],
-            'amount'                 => $transactionApi::convertDollarsToPennies($transactionDetails['amount']),
-            'type'                   => 'payment',
+            'amount'                 => $pennies,
+            'type'                   => $transactionDetails['type'],
         ]);
 
         return $authorizeTransaction;
@@ -128,13 +127,13 @@ trait Transactable
             throw new BadRequestHttpException('Transaction must be pending settlement in order to be voided.  Refund transaction instead.');
         }
 
+        /** @var AuthorizeTransaction $payment */
         $payment = $this->last_payment;
 
         $transactionApi = $this->getTransactionApi();
+        $transaction = $transactionApi->voidTransaction($payment->adn_transaction_id);
 
-        $transactionApi->voidTransaction($payment->adn_transaction_id);
-
-        $payment->status = 'voided';
+        $payment->status = $transaction['type'];
         $payment->save();
 
         $this->status = 'void';

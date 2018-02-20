@@ -67,6 +67,7 @@ class TransactionApi extends MerchantApi
             'transId'  => $transactionResponse->getTransId(),
             'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
             'amount'   => $transactionRequest->getAmount(),
+            'type'     => $transactionRequest->getTransactionType(),
         ];
     }
 
@@ -114,6 +115,7 @@ class TransactionApi extends MerchantApi
             'transId'  => $transactionResponse->getTransId(),
             'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
             'amount'   => $transactionRequest->getAmount(),
+            'type'     => $transactionRequest->getTransactionType(),
         ];
     }
 
@@ -124,7 +126,7 @@ class TransactionApi extends MerchantApi
      * @param integer $transactionId
      * @param integer $lastFour
      *
-     * @return integer
+     * @return array
      * @throws \Exception
      */
     public function refundTransaction($pennies, $transactionId, $lastFour)
@@ -145,7 +147,13 @@ class TransactionApi extends MerchantApi
 
         $transactionResponse = $this->buildAndExecuteRequest($transactionRequest);
 
-        return $transactionResponse->getTransId();
+        return [
+            'authCode' => $transactionResponse->getAuthCode(),
+            'transId'  => $transactionResponse->getTransId(),
+            'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
+            'amount'   => $transactionRequest->getAmount(),
+            'type'     => $transactionRequest->getTransactionType(),
+        ];
     }
 
     /**
@@ -153,7 +161,7 @@ class TransactionApi extends MerchantApi
      *
      * @param integer $transactionId
      *
-     * @return integer
+     * @return array
      * @throws \Exception
      */
     public function voidTransaction($transactionId)
@@ -165,7 +173,13 @@ class TransactionApi extends MerchantApi
 
         $transactionResponse = $this->buildAndExecuteRequest($transactionRequest);
 
-        return $transactionResponse->getTransId();
+        return [
+            'authCode' => $transactionResponse->getAuthCode(),
+            'transId'  => $transactionResponse->getTransId(),
+            'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
+            'amount'   => $transactionRequest->getAmount(),
+            'type'     => $transactionRequest->getTransactionType(),
+        ];
     }
 
     /********************
