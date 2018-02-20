@@ -17,7 +17,7 @@ trait Transactable
      * @param integer $pennies
      * @param integer $paymentProfileId
      *
-     * @return array
+     * @return AuthorizeTransaction
      * @throws \Exception
      */
     public function charge($pennies, $paymentProfileId)
@@ -48,7 +48,7 @@ trait Transactable
      * @param integer $pennies
      * @param string  $trackDetails
      *
-     * @return array
+     * @return AuthorizeTransaction
      * @throws \Exception
      */
     public function chargeCard($pennies, $trackDetails)
@@ -80,7 +80,7 @@ trait Transactable
      *
      * @param  integer $pennies Amount to be refunded, in cents
      *
-     * @return integer
+     * @return AuthorizeTransaction
      * @throws \Exception
      */
     public function refund($pennies)
@@ -100,7 +100,18 @@ trait Transactable
 
         $transactionApi = $this->getTransactionApi();
 
-        return $transactionApi->refundTransaction($pennies, $payment->payment_trans_id, $payment->last_four);
+        $transactionDetails = $transactionApi->refundTransaction($pennies, $payment->payment_trans_id, $payment->last_four);
+
+        $authorizeTransaction = $this->authorizeTransactions()->create([
+            'organization_id'        => $this->organization_id,
+            'adn_authorization_code' => $transactionDetails['authCode'],
+            'adn_transaction_id'     => $transactionDetails['transId'],
+            'last_four'              => $transactionDetails['lastFour'],
+            'amount'                 => $pennies,
+            'type'                   => $transactionDetails['type'],
+        ]);
+
+        return $authorizeTransaction;
     }
 
     /**
