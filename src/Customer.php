@@ -4,6 +4,7 @@ namespace Laravel\CashierAuthorizeNet;
 
 use net\authorize\api\contract\v1 as AnetAPI;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 trait Customer
@@ -123,7 +124,7 @@ trait Customer
             $authorizeCustomerProfile = $customerApi->getCustomerProfile([
                 'email' => $this->email,
             ]);
-        } catch (NotFoundHttpException $e) {
+        } catch (HttpException $e) {
             $authorizeCustomerProfile = $this->initializeCustomerProfile();
         }
 
