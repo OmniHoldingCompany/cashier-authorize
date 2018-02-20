@@ -102,6 +102,7 @@ trait Customer
             $authorizeCustomerProfile = $this->getCustomerProfileByEmail();
 
             $this->authorize_merchant_id = $authorizeCustomerProfile->getMerchantCustomerId();
+            $this->authorize_id          = $authorizeCustomerProfile->getCustomerProfileId();
             $this->save();
         }
 
