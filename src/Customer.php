@@ -6,7 +6,6 @@ use net\authorize\api\contract\v1 as AnetAPI;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 trait Customer
 {
@@ -85,7 +84,7 @@ trait Customer
             $authorizeCustomerProfile = $customerApi->getCustomerProfile([
                 'merchant_customer_id' => $this->getAuthorizeMerchantId()
             ]);
-        } catch (NotFoundHttpException $e) {
+        } catch (BadRequestHttpException $e) {
             $authorizeCustomerProfile = $this->getCustomerProfileByEmail();
         }
 
