@@ -87,15 +87,9 @@ class CustomerApi extends MerchantApi
         $request = new AnetAPI\GetCustomerProfileRequest();
         $request->setMerchantAuthentication($this->merchantAuthentication);
 
-        if (isset($customerDetails['merchant_customer_id'])) {
-            $request->setMerchantCustomerId($customerDetails['merchant_customer_id']);
-        }
-        if (isset($customerDetails['customer_profile_id'])) {
-            $request->setCustomerProfileId($customerDetails['customer_profile_id']);
-        }
-        if (isset($customerDetails['email'])) {
-            $request->setEmail($customerDetails['email']);
-        }
+        $request->setMerchantCustomerId($customerDetails['merchant_customer_id'] ?? null);
+        $request->setCustomerProfileId($customerDetails['customer_profile_id'] ?? null);
+        $request->setEmail($customerDetails['email'] ?? null);
 
         $controller = new AnetController\GetCustomerProfileController($request);
 

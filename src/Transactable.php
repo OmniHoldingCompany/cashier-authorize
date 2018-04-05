@@ -3,7 +3,7 @@
 namespace Laravel\CashierAuthorizeNet;
 
 use App\AuthorizeTransaction;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 trait Transactable
 {
@@ -91,7 +91,7 @@ trait Transactable
         $transactionDetails = $this->getDetails();
 
         if (!in_array($transactionDetails['status'], ['settledSuccessfully'])) {
-            throw new BadRequestHttpException('Transaction must be settled before it can be refunded.  Void transaction instead.');
+            throw new ConflictHttpException('Transaction must be settled before it can be refunded.  Void transaction instead.');
         }
 
         $payment = $this->last_payment;
@@ -123,7 +123,7 @@ trait Transactable
         $transactionDetails = $this->getDetails();
 
         if (!in_array($transactionDetails['status'], ['authorizedPendingCapture', 'capturedPendingSettlement', 'FDSPendingReview'])) {
-            throw new BadRequestHttpException('Transaction must be pending settlement in order to be voided.  Refund transaction instead.');
+            throw new ConflictHttpException('Transaction must be pending settlement in order to be voided.  Refund transaction instead.');
         }
 
         /** @var AuthorizeTransaction $payment */
