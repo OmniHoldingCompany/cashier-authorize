@@ -4,6 +4,7 @@ namespace Laravel\CashierAuthorizeNet;
 
 use net\authorize\api\contract\v1 as AnetAPI;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -192,9 +193,9 @@ trait Customer
 
         $paymentProfileId = $customerApi->addPaymentProfile($this->getAuthorizeId(), $paymentProfile);
 
-        if ($default) {
+        if ($default || !$this->authorize_payment_id) {
             $this->authorize_payment_id = $paymentProfileId;
-            $this->save;
+            $this->save();
         }
 
         return $paymentProfileId;
@@ -289,13 +290,16 @@ trait Customer
     /**
      * Delete a specific payment profile from this user.
      *
-     * @param string $customerPaymentProfileId
+     * @param int $customerPaymentProfileId
      *
      * @return bool
      * @throws \Exception
      */
     public function deleteCustomerPaymentProfile($customerPaymentProfileId)
     {
+        if ($customerPaymentProfileId == $this->authorize_payment_id) {
+            throw new ConflictHttpException('Primary payment can not be removed.');
+        }
         $customerApi = $this->getCustomerApi();
 
         return $customerApi->deletePaymentProfile($this->getAuthorizeId(), $customerPaymentProfileId);
