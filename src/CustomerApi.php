@@ -6,6 +6,7 @@ use net\authorize\api\contract\v1 as AnetAPI;
 use net\authorize\api\controller as AnetController;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 
 /**
@@ -109,8 +110,11 @@ class CustomerApi extends MerchantApi
                     break;
 
                 case 'E00039': // Multiple records found. Please refine search options.
-                case 'E00040': // The Record cannot be found.
                     throw new BadRequestHttpException($errorMessages[0]->getText());
+                    break;
+
+                case 'E00040': // The Record cannot be found.
+                    throw new NotFoundHttpException($errorMessages[0]->getText());
                     break;
 
                 default:
@@ -161,7 +165,7 @@ class CustomerApi extends MerchantApi
                     break;
 
                 case 'E00040': // The Record cannot be found.
-                    throw new BadRequestHttpException($errorMessages[0]->getText());
+                    throw new NotFoundHttpException($errorMessages[0]->getText());
                     break;
 
                 case 'E00001': // An error occurred during processing. Please try again.
@@ -208,8 +212,9 @@ class CustomerApi extends MerchantApi
                     break;
 
                 case 'E00040': // The Record cannot be found.
-                    throw new BadRequestHttpException($errorMessages[0]->getText());
+                    throw new NotFoundHttpException($errorMessages[0]->getText());
                     break;
+
                 default:
                     throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getText(), 500);
                     break;
@@ -252,7 +257,6 @@ class CustomerApi extends MerchantApi
             $errorMessages = $response->getMessages()->getMessage();
             switch ($errorMessages[0]->getCode()) {
                 case 'E00015': // The field length is invalid for Card Number.
-                case 'E00040': // The Record cannot be found.
                 case 'E00083': // Bank payment method is not accepted for the selected business country.
                 case 'E00084': // Credit card payment method is not accepted for the selected business country.
                 case 'E00085': // State is not valid.
@@ -262,6 +266,10 @@ class CustomerApi extends MerchantApi
                 case 'E00039': // A duplicate record already exists.
                 case 'E00042': // You cannot add more than {0} payment profiles.
                     throw new ConflictHttpException($errorMessages[0]->getText());
+                    break;
+
+                case 'E00040': // The Record cannot be found.
+                    throw new NotFoundHttpException($errorMessages[0]->getText());
                     break;
 
                 case 'E00053': // The server is currently too busy, please try again later.
@@ -308,8 +316,11 @@ class CustomerApi extends MerchantApi
             $errorMessages = $response->getMessages()->getMessage();
             switch ($errorMessages[0]->getCode()) {
                 case 'E00013': // Customer Payment Profile ID is invalid.
-                case 'E00040': // The Record cannot be found.
                     throw new BadRequestHttpException($errorMessages[0]->getText());
+                    break;
+
+                case 'E00040': // The Record cannot be found.
+                    throw new NotFoundHttpException($errorMessages[0]->getText());
                     break;
 
                 case 'E00053': // The server is currently too busy, please try again later.
@@ -357,8 +368,11 @@ class CustomerApi extends MerchantApi
             $errorMessages = $response->getMessages()->getMessage();
             switch ($errorMessages[0]->getCode()) {
                 case 'E00013': // Customer Payment Profile ID is invalid.
-                case 'E00040': // The Record cannot be found.
                     throw new BadRequestHttpException($errorMessages[0]->getText());
+                    break;
+
+                case 'E00040': // The Record cannot be found.
+                    throw new NotFoundHttpException($errorMessages[0]->getText());
                     break;
 
                 case 'E00053': // The server is currently too busy, please try again later.
