@@ -16,11 +16,6 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
  */
 class TransactionApi extends MerchantApi
 {
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     /**
      * Make a "one off" charge on the customer for the given amount.
      *

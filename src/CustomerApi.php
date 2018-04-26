@@ -15,11 +15,6 @@ use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
  */
 class CustomerApi extends MerchantApi
 {
-    public function __construct()
-    {
-        parent::__construct();
-    }
-
     /********************
      * CUSTOMER PROFILE *
      ********************/
@@ -62,9 +57,11 @@ class CustomerApi extends MerchantApi
                 case 'E00104': // The server is in maintenance, so the requested method is unavailable, please try again later.
                     throw new ServiceUnavailableHttpException($errorMessages[0]->getText());
                     break;
+
                 case 'E00039': // A duplicate record already exists.
                     throw new BadRequestHttpException($errorMessages[0]->getText());
                     break;
+
                 default:
                     throw new \Exception($errorMessages[0]->getCode() . ': ' . $errorMessages[0]->getText());
                     break;
