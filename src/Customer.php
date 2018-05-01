@@ -237,16 +237,19 @@ trait Customer
             $card        = $profile->getPayment()->getCreditCard();
             $bankAccount = $profile->getPayment()->getBankAccount();
 
+            $profileId = $profile->getCustomerPaymentProfileId();
+
             if (isset($card)) {
                 $paymentMethods['credit_cards'][] = [
-                    'id'         => $profile->getCustomerPaymentProfileId(),
+                    'id'         => $profileId,
                     'number'     => $card->getCardNumber(),
                     'expiration' => $card->getExpirationDate(),
                     'type'       => $card->getCardType(),
+                    'primary'    => $this->authorize_payment_id === $profileId,
                 ];
             } elseif (isset($bankAccount)) {
                 $paymentMethods['bank_accounts'][] = [
-                    'id'              => $profile->getCustomerPaymentProfileId(),
+                    'id'              => $profileId,
                     'account_number'  => $bankAccount->getAccountNumber(),
                     'account_type'    => $bankAccount->getAccountType(),
                     'bank_name'       => $bankAccount->getBankName(),
