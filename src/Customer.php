@@ -245,7 +245,7 @@ trait Customer
                     'number'     => $card->getCardNumber(),
                     'expiration' => $card->getExpirationDate(),
                     'type'       => $card->getCardType(),
-                    'primary'    => $this->authorize_payment_id === $profileId,
+                    'primary'    => $this->authorize_payment_id == $profileId,
                 ];
             } elseif (isset($bankAccount)) {
                 $paymentMethods['bank_accounts'][] = [
