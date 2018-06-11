@@ -17,7 +17,7 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 class TransactionApi extends MerchantApi
 {
     /**
-     * Make a "one off" charge on the customer for the given amount.
+     * Make a "one off" charge on the provided credit card for the given amount using card track 1 data.
      *
      * @param integer $pennies Amount to be charged, in cents
      * @param string  $track1
@@ -115,7 +115,7 @@ class TransactionApi extends MerchantApi
     }
 
     /**
-     * Make a "one off" charge on the customer for the given amount.
+     * Make a "one off" charge on the provided credit card for the given amount.
      *
      * @param integer $pennies Amount to be charged, in cents
      * @param array   $creditCardDetails
