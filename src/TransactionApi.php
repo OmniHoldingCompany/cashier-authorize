@@ -61,7 +61,7 @@ class TransactionApi extends MerchantApi
             'authCode' => $transactionResponse->getAuthCode(),
             'transId'  => $transactionResponse->getTransId(),
             'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
-            'amount'   => $transactionRequest->getAmount(),
+            'amount'   => self::convertDollarsToPennies($transactionRequest->getAmount()),
             'type'     => $transactionRequest->getTransactionType(),
         ];
     }
@@ -78,7 +78,7 @@ class TransactionApi extends MerchantApi
      * @return array
      * @throws \Exception
      */
-    public function charge($pennies, $CustomerProfileId, $paymentProfileId, $invoiceId = null, array $options = [])
+    public function chargeProfile($pennies, $CustomerProfileId, $paymentProfileId, $invoiceId = null, array $options = [])
     {
         $options = array_merge([
             'currency' => self::preferredCurrency(),
@@ -109,7 +109,53 @@ class TransactionApi extends MerchantApi
             'authCode' => $transactionResponse->getAuthCode(),
             'transId'  => $transactionResponse->getTransId(),
             'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
-            'amount'   => $transactionRequest->getAmount(),
+            'amount'   => self::convertDollarsToPennies($transactionRequest->getAmount()),
+            'type'     => $transactionRequest->getTransactionType(),
+        ];
+    }
+
+    /**
+     * Make a "one off" charge on the customer for the given amount.
+     *
+     * @param integer $pennies Amount to be charged, in cents
+     * @param array   $creditCardDetails
+     * @param integer $invoiceId
+     * @param array   $options
+     *
+     * @return array
+     * @throws \Exception
+     */
+    public function chargeCreditCard($pennies, $creditCardDetails, $invoiceId = null, array $options = [])
+    {
+        $options = array_merge([
+            'currency' => self::preferredCurrency(),
+        ], $options);
+
+        $order = new AnetAPI\OrderType;
+        $order->setDescription($options['description'] ?? null);
+        $order->setInvoiceNumber($invoiceId);
+
+        $creditCard = new AnetAPI\CreditCardType();
+        $creditCard->setCardNumber($creditCardDetails['number']);
+        $creditCard->setExpirationDate($creditCardDetails['expiration']);
+
+        $payment = new AnetAPI\PaymentType();
+        $payment->setCreditCard($creditCard);
+
+        $transactionRequest = new AnetAPI\TransactionRequestType();
+        $transactionRequest->setTransactionType('authCaptureTransaction');
+        $transactionRequest->setAmount(self::convertPenniesToDollars($pennies));
+
+        $transactionRequest->setCurrencyCode($options['currency']);
+        $transactionRequest->setOrder($order);
+
+        $transactionResponse = $this->buildAndExecuteRequest($transactionRequest);
+
+        return [
+            'authCode' => $transactionResponse->getAuthCode(),
+            'transId'  => $transactionResponse->getTransId(),
+            'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
+            'amount'   => self::convertDollarsToPennies($transactionRequest->getAmount()),
             'type'     => $transactionRequest->getTransactionType(),
         ];
     }
