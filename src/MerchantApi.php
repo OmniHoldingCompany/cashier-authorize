@@ -77,6 +77,8 @@ class MerchantApi
     /**
      * Get detailed information about a specific transaction.
      *
+     * @param $transactionId
+     *
      * @return AnetAPI\TransactionDetailsType
      * @throws \Exception
      */
