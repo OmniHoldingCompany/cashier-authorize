@@ -79,7 +79,7 @@ class MerchantApi
      *
      * @param $transactionId
      *
-     * @return AnetAPI\TransactionDetailsType
+     * @return array
      * @throws \Exception
      */
     public function getTransactionDetails($transactionId)
@@ -116,6 +116,15 @@ class MerchantApi
             }
         }
 
-        return $response->getTransaction();
+        $details = $response->getTransaction();
+
+        return [
+            'status'            => $details->getTransactionStatus(),
+            'type'              => $details->getTransactionType(),
+            'fds_filter_action' => $details->getFDSFilterAction(),
+            'authorize_amount'  => TransactionApi::convertDollarsToPennies($details->getAuthAmount()),
+            'settle_amount'     => TransactionApi::convertDollarsToPennies($details->getSettleAmount()),
+            'submitted_at'      => $details->getSubmitTimeUTC(),
+        ];
     }
 }
