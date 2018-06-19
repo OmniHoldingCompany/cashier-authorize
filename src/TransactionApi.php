@@ -148,6 +148,7 @@ class TransactionApi extends MerchantApi
 
         $transactionRequest->setCurrencyCode($options['currency']);
         $transactionRequest->setOrder($order);
+        $transactionRequest->setPayment($payment);
 
         $transactionResponse = $this->buildAndExecuteRequest($transactionRequest);
 
