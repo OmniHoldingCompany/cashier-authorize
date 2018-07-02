@@ -111,7 +111,7 @@ class CustomerApi extends MerchantApi
                     break;
 
                 case 'E00040': // The Record cannot be found.
-                    throw new NotFoundHttpException($errorMessages[0]->getText());
+                    throw new NotFoundHttpException($errorMessages[0]->getText()); // Todo: replace with record not found
                     break;
 
                 default:
@@ -162,7 +162,7 @@ class CustomerApi extends MerchantApi
                     break;
 
                 case 'E00040': // The Record cannot be found.
-                    throw new NotFoundHttpException($errorMessages[0]->getText());
+                    throw new NotFoundHttpException($errorMessages[0]->getText()); // Todo: replace with record not found
                     break;
 
                 case 'E00001': // An error occurred during processing. Please try again.
@@ -209,7 +209,7 @@ class CustomerApi extends MerchantApi
                     break;
 
                 case 'E00040': // The Record cannot be found.
-                    throw new NotFoundHttpException($errorMessages[0]->getText());
+                    throw new NotFoundHttpException($errorMessages[0]->getText()); // Todo: replace with record not found
                     break;
 
                 default:
@@ -266,7 +266,7 @@ class CustomerApi extends MerchantApi
                     break;
 
                 case 'E00040': // The Record cannot be found.
-                    throw new NotFoundHttpException($errorMessages[0]->getText());
+                    throw new NotFoundHttpException($errorMessages[0]->getText()); // Todo: replace with record not found
                     break;
 
                 case 'E00053': // The server is currently too busy, please try again later.
@@ -317,7 +317,7 @@ class CustomerApi extends MerchantApi
                     break;
 
                 case 'E00040': // The Record cannot be found.
-                    throw new NotFoundHttpException($errorMessages[0]->getText());
+                    throw new NotFoundHttpException($errorMessages[0]->getText()); // Todo: replace with record not found
                     break;
 
                 case 'E00053': // The server is currently too busy, please try again later.
@@ -369,7 +369,7 @@ class CustomerApi extends MerchantApi
                     break;
 
                 case 'E00040': // The Record cannot be found.
-                    throw new NotFoundHttpException($errorMessages[0]->getText());
+                    throw new NotFoundHttpException($errorMessages[0]->getText()); // Todo: replace with record not found
                     break;
 
                 case 'E00053': // The server is currently too busy, please try again later.
