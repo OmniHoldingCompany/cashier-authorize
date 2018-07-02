@@ -1,0 +1,388 @@
+<?php
+
+namespace Laravel\CashierAuthorizeNet;
+
+use App\AuthorizeTransaction;
+use App\Exceptions\CheckoutRestrictionException;
+use App\Exceptions\PaymentException;
+use App\StoreCredit;
+use App\Transaction;
+use App\TransactionItem;
+use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+
+/**
+ * Class TransactionProcessor
+ * @package App\Services
+ */
+class TransactionProcessor
+{
+    /** @var TransactionApi $transactionApi */
+    private $transactionApi;
+
+    /** @var Transaction $transaction */
+    private $transaction;
+
+    /** @var string|array $paymentData */
+    private $paymentData;
+
+    /**
+     * @param Transaction $transaction
+     *
+     * @return void
+     */
+    public function setTransaction(Transaction $transaction)
+    {
+        $this->transaction = $transaction;
+
+        $organization = $transaction->organization;
+
+        $loader = new \Dotenv\Loader('notreal');
+        $loader->setEnvironmentVariable('ADN_API_LOGIN_ID', $organization->adn_api_login_id);
+        $loader->setEnvironmentVariable('ADN_TRANSACTION_KEY', $organization->adn_transaction_key);
+        $loader->setEnvironmentVariable('ADN_SECRET_KEY', $organization->adn_secret_key);
+
+        $this->transactionApi = resolve(TransactionApi::class);
+        $this->transactionApi->__construct();  // Laravel wont call __construct on its own for some reason
+    }
+
+    /**
+     * @param string|array $paymentData
+     *
+     * @return void
+     */
+    public function setPaymentData($paymentData)
+    {
+        $this->paymentData = $paymentData;
+    }
+
+    /**
+     * Apply store credit, fulfill transaction and charge payment method
+     *
+     * @param string $note    Save a note to the transaction
+     * @param bool   $fulfill Whether or not to fulfill the transaction
+     *
+     * @return AuthorizeTransaction
+     *
+     * @throws CheckoutRestrictionException
+     * @throws \Exception
+     */
+    public function checkout($note = null, $fulfill = true)
+    {
+        if (!in_array($this->transaction->status, ['new', 'failed'])) {
+            throw new CheckoutRestrictionException('This transaction has already been paid for or voided');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $this->transaction->update([
+                'status' => 'pending',
+                'note'   => $note ?? $this->transaction->note,
+            ]);
+
+            $this->applyStoreCredit();
+
+            $this->fulfill($fulfill);
+            if ($this->transaction->amount_due > 0) {
+                $authorizeTransaction = $this->processPayment();
+            }
+
+            if ($this->transaction->amount_due !== 0) {
+                throw new \Exception(
+                    'Critical Error: ' . $this->transaction->amount_due < 0 ? 'Over' : 'Under' . 'payment detected.',
+                    config('app.response_codes.server_error')
+                );
+            }
+
+            DB::commit();
+        } catch (PaymentException $e) {
+            DB::rollback();
+            $this->logChargeFailure($e);
+            throw $e;
+        } catch (\Exception $e) {
+            DB::rollback();
+            throw $e;
+        }
+
+        return $authorizeTransaction ?? null;
+    }
+
+    /**
+     * Loop through transaction items to fulfill and mark transaction as fulfilled.
+     *
+     * @param bool $fulfill
+     *
+     * @return void
+     *
+     * @throws CheckoutRestrictionException
+     * @throws \Exception
+     */
+    private function fulfill($fulfill = true)
+    {
+        /** @var TransactionItem $transactionItem */
+        foreach ($this->transaction->transactionItems as $transactionItem) {
+            // set this here so we don't have to query to load it in uses below
+            $transactionItem->setRelation('transaction', $this->transaction);
+            $transactionItem->fulfill($fulfill);
+        }
+
+        $this->transaction->status = 'fulfilled';
+        $this->transaction->save();
+
+        $this->transaction->removeUnusedPromoCodes();
+    }
+
+    /**
+     * @throws \Exception
+     */
+    private function applyStoreCredit()
+    {
+        $user = $this->transaction->user;
+        $site = $this->transaction->site;
+
+        $storeCreditApplied = 0;
+
+        // Only apply store credit to inventory and subscription items
+        $maxCredit = $this->transaction->storeCreditApplicableAmount();
+
+        // Check for site specific store credit
+        $siteSpecificStoreCreditBalance = $user->storeCreditBalance($site->id);
+        $specificStoreCreditToUse       = $maxCredit < $siteSpecificStoreCreditBalance ?
+            $maxCredit : $siteSpecificStoreCreditBalance;
+
+        if ($specificStoreCreditToUse > 0) {
+            // Apply site specific store credit
+            $user->addStoreCredit(-$specificStoreCreditToUse, $this->transaction, $site);
+            $this->transaction->amount_due -= $specificStoreCreditToUse;
+            $storeCreditApplied            += $specificStoreCreditToUse;
+            $maxCredit                     -= $specificStoreCreditToUse;
+        }
+
+        // Check for general store credit
+        $generalStoreCreditBalance = $user->storeCreditBalance();
+        $generalStoreCreditToUse   = $maxCredit < $generalStoreCreditBalance ? $maxCredit : $generalStoreCreditBalance;
+        if ($generalStoreCreditToUse > 0) {
+            // Apply general store credit
+            $user->addStoreCredit(-$generalStoreCreditToUse, $this->transaction);
+            $this->transaction->amount_due -= $generalStoreCreditToUse;
+            $storeCreditApplied            += $generalStoreCreditToUse;
+            $maxCredit                     -= $generalStoreCreditToUse;
+        }
+
+        if ($this->transaction->amount_due < 0) {
+            throw new \Exception(
+                'Math is hard.  Aborting transaction. ' . $maxCredit . ' | ' .
+                $specificStoreCreditToUse . ' | ' . $generalStoreCreditToUse . ' | ' . $this->transaction->amount_due,
+                config('app.response_codes.server_error')
+            );
+        }
+
+        $this->transaction->store_credit_applied = $storeCreditApplied;
+        $this->transaction->save();
+    }
+
+    /**
+     * @return AuthorizeTransaction
+     *
+     * @throws PaymentException
+     */
+    private function processPayment()
+    {
+        $transaction = $this->transaction;
+
+        $transaction->increment('charge_attempts');
+
+        try {
+            $transactionApi = $this->transactionApi;
+
+            switch ($this->getPaymentType($this->paymentData)) {
+                case 'payment_profile':
+                    $transactionDetails = $transactionApi->chargeProfile($transaction->amount_due, $transaction->user->authorize_id, $this->paymentData);
+                    break;
+
+                case 'track_1':
+                    $transactionDetails = $transactionApi->chargeTrack($transaction->amount_due, $this->paymentData);
+                    break;
+
+                case 'credit_card':
+                    $transactionDetails = $transactionApi->chargeCreditCard($transaction->amount_due, $this->paymentData);
+                    break;
+
+                case 'track_2':
+                default:
+                    throw new \Exception('Unknown payment type');
+                    break;
+            }
+
+            /** @var AuthorizeTransaction $authorizeTransaction */
+            $authorizeTransaction = $transaction->authorizeTransactions()->create([
+                'organization_id'        => $transaction->organization_id,
+                'adn_authorization_code' => $transactionDetails['authCode'],
+                'adn_transaction_id'     => $transactionDetails['transId'],
+                'last_four'              => $transactionDetails['lastFour'],
+                'amount'                 => $transactionDetails['amount'],
+                'type'                   => $transactionDetails['type'],
+            ]);
+
+            $transaction->payment_applied += $transactionDetails['amount'];
+            $transaction->amount_due      -= $transactionDetails['amount'];
+
+            $transaction->save();
+
+        } catch (\Exception $e) {
+            throw new PaymentException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        return $authorizeTransaction;
+    }
+
+    /**
+     * @return string
+     * @throws \Exception
+     */
+    public static function getPaymentType($paymentData)
+    {
+        if (is_array($paymentData) && isset($paymentData['number']) && isset($paymentData['expiration']) && isset($paymentData['cvv'])) {
+            return 'credit_card';
+        } elseif (preg_match('/^%B\d{0,19}\^[\w\s\/]{2,26}\^\d{7}\w*\?$/', $paymentData)) {
+            return 'track_1';
+        } elseif (preg_match('/;\d{0,19}=\d{7}\w*\?/', $paymentData)) {
+            return 'track_2';
+        } elseif (is_numeric($paymentData) && strlen($paymentData) === 10) {
+            return 'payment_profile';
+        }
+
+        return null;
+    }
+
+    /**
+     * Append a new log to the array of charge failure logs.
+     *
+     * @param \Exception $exception
+     *
+     * @return void
+     */
+    private function logChargeFailure($exception)
+    {
+        $logs = $this->transaction->charge_failure_logs;
+
+        $logs[] = $exception->getMessage();
+
+        $this->transaction->increment('charge_attempts');
+        $this->transaction->update([
+            'status'              => 'failed',
+            'charge_failure_logs' => $logs,
+        ]);
+    }
+
+    /**
+     * Process a refund on the transaction against the credit card
+     * or for store credit. If the amount is zero, no refund is
+     * applied.
+     *
+     * @param array   $transactionItems
+     * @param boolean $applyAsStoreCredit
+     *
+     * @throws \Exception
+     *
+     * @return StoreCredit|AuthorizeTransaction
+     */
+    public function returnItems($transactionItems, $applyAsStoreCredit = false)
+    {
+        $transaction  = $this->transaction;
+        $refundAmount = 0;
+
+        if ($transaction->status !== 'fulfilled') {
+            throw new \Exception('Transaction must be fulfilled before being returned.');
+        }
+
+        DB::beginTransaction();
+
+        foreach ($transactionItems as $transactionItem) {
+            /** @var TransactionItem $transactionItem */
+            $transactionItem = TransactionItem::whereId($transactionItem['id'])->whereTransactionId($transaction->id)->firstOrFail();
+            $refundAmount    += $transactionItem->return($transactionItem['quantity'], $transactionItem['restock']);
+        };
+
+        if ($transaction->comp_reason) {
+            DB::commit();
+            return null;
+        }
+
+        $transaction->increment('refund', $refundAmount);
+
+        if ($applyAsStoreCredit) {
+            $refund = $transaction->user->addStoreCredit($refundAmount, $transaction);
+        } else {
+            $transactionApi     = $this->transactionApi;
+            $payment            = $transaction->last_payment;
+            $transactionDetails = $transactionApi->getTransactionDetails($payment->adn_transaction_id);
+
+            if ($transactionDetails['status'] !== 'settledSuccessfully') {
+                throw new ConflictHttpException('Transaction must be settled before it can be refunded.  Void transaction instead.');
+            }
+
+            $refundDetails = $transactionApi->refundTransaction($refundAmount, $payment->adn_transaction_id, $payment->last_four);
+
+            $refund = $transaction->authorizeTransactions()->create([
+                'organization_id'        => $transaction->organization_id,
+                'adn_authorization_code' => $refundDetails['authCode'],
+                'adn_transaction_id'     => $refundDetails['transId'],
+                'last_four'              => $refundDetails['lastFour'],
+                'amount'                 => -$refundDetails['amount'],
+                'type'                   => $refundDetails['type'],
+            ]);
+        }
+
+        DB::commit();
+
+        return $refund;
+    }
+
+    /**
+     * Void transaction if pending
+     *
+     * @throws \Exception
+     *
+     * @return void
+     */
+    public function void()
+    {
+        $transactionApi     = $this->transactionApi;
+        $transaction        = $this->transaction;
+        $payment            = $transaction->last_payment;
+
+        if ($transaction->status !== 'fulfilled' || !$payment instanceof AuthorizeTransaction) {
+            throw new ConflictHttpException('Payment not submitted.');
+        }
+
+        $transactionDetails = $transactionApi->getTransactionDetails($payment->adn_transaction_id);
+
+        if (!in_array($transactionDetails['status'], ['authorizedPendingCapture', 'capturedPendingSettlement', 'FDSPendingReview'])) {
+            throw new ConflictHttpException('Transaction must be pending settlement in order to be voided.  Refund transaction instead.');
+        }
+
+        foreach ($transaction->transactionItems as $transactionItem) {
+            /** @var TransactionItem $transactionItem */
+            $transactionItem = TransactionItem::whereId($transactionItem['id'])->firstOrFail();
+            $transactionItem->return();
+        };
+
+        $transactionApi->voidTransaction($payment->adn_transaction_id);
+
+        $transaction->status = 'void';
+        $transaction->save();
+    }
+
+    public function comp($reason)
+    {
+        $this->transaction->update([
+            'comp_reason' => $reason,
+            'discount'    => $this->transaction->subtotal,
+            'tax'         => 0,
+            'total'       => 0,
+            'amount_due'  => 0,
+        ]);
+    }
+}
