@@ -1,10 +1,9 @@
 <?php
 
-namespace App\Services;
+namespace Laravel\CashierAuthorizeNet;
 
 use App\Organization;
 use App\User;
-use Laravel\CashierAuthorizeNet\CustomerApi;
 use net\authorize\api\contract\v1 as AnetAPI;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
