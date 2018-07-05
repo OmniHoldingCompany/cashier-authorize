@@ -8,7 +8,10 @@ use App\Exceptions\PaymentException;
 use App\StoreCredit;
 use App\Transaction;
 use App\TransactionItem;
+use App\User;
 use Illuminate\Support\Facades\DB;
+use Laravel\CashierAuthorizeNet\AuthorizeCustomerManager;
+use Laravel\CashierAuthorizeNet\TransactionApi;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
@@ -25,6 +28,9 @@ class TransactionProcessor
 
     /** @var string|array $paymentData */
     private $paymentData;
+
+    /** @var boolean $storeProfile */
+    public $storeProfile = false;
 
     /**
      * @param Transaction $transaction
@@ -84,6 +90,11 @@ class TransactionProcessor
             $this->applyStoreCredit();
 
             $this->fulfill($fulfill);
+
+            if ($this->storeProfile) {
+                $this->storePaymentProfile();
+            }
+
             if ($this->transaction->amount_due > 0) {
                 $authorizeTransaction = $this->processPayment();
             }
@@ -183,6 +194,41 @@ class TransactionProcessor
     }
 
     /**
+     * @return string
+     * @throws \Exception
+     */
+    public function storePaymentProfile()
+    {
+        /** @var User $user */
+        $user        = $this->transaction->user;
+        $acm = app(AuthorizeCustomerManager::class);
+        $acm->setMerchant($user->organization);
+
+        switch ($this->getPaymentType($this->paymentData)) {
+            case 'track_1':
+                $creditCard = self::splitTrackData($this->paymentData);
+
+                $paymentProfileId = $acm->addCreditCard($creditCard);
+                break;
+
+            case 'credit_card':
+                $paymentProfileId = $acm->addCreditCard($this->paymentData);
+                break;
+
+            case 'payment_profile':
+                $paymentProfileId = $this->paymentData;
+                break;
+
+            case 'track_2':
+            default:
+                throw new \Exception('Unknown payment type');
+                break;
+        }
+
+        return $paymentProfileId;
+    }
+
+    /**
      * @return AuthorizeTransaction
      *
      * @throws PaymentException
@@ -254,6 +300,39 @@ class TransactionProcessor
         }
 
         return null;
+    }
+
+    /**
+     * @param $trackData
+     *
+     * @return array
+     * @throws \Exception
+     */
+    private static function splitTrackData($trackData)
+    {
+        switch (self::getPaymentType($trackData)) {
+            case 'track_1':
+                $parts = explode('^', $trackData);
+                $names = explode('/', $parts[1]);
+                $year  = substr($parts[2], 0, 2);
+                $month = substr($parts[2], 2, 2);
+                $creditCard = [
+                    'number'     => substr($parts[0], 2),
+                    'first_name' => trim($names[1]),
+                    'last_name'  => trim($names[0]),
+                    'expiration' => $month.'/'.$year,
+                ];
+                break;
+
+            case 'track_2':
+            case 'credit_card':
+            case 'payment_profile':
+            default:
+                throw new \Exception('Unknown payment type');
+                break;
+        }
+
+        return $creditCard;
     }
 
     /**
@@ -384,5 +463,26 @@ class TransactionProcessor
             'total'       => 0,
             'amount_due'  => 0,
         ]);
+    }
+
+    /**
+     * Updates the voidable status on the transaction's last payment.
+     *
+     * @return \App\Transaction
+     * @throws \Exception
+     */
+    public function updateVoidableStatus()
+    {
+        $transaction    = $this->transaction;
+        $transactionApi = $this->transactionApi;
+        $authData       = $transactionApi->getTransactionDetails($transaction->last_payment->adn_transaction_id);
+
+        $transaction->last_payment->update([
+            'voidable' => $authData['status'] !== 'settledSuccessfully',
+        ]);
+
+        $transaction->getAttribute('is_voidable');
+
+        return $transaction;
     }
 }
