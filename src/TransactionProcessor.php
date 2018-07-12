@@ -428,17 +428,15 @@ class TransactionProcessor
      */
     public function void()
     {
-        $transactionApi     = $this->transactionApi;
-        $transaction        = $this->transaction;
-        $payment            = $transaction->last_payment;
+        $transactionApi = $this->transactionApi;
+        $transaction    = $this->transaction;
+        $payment        = $transaction->last_payment;
 
         if ($transaction->status !== 'fulfilled' || !$payment instanceof AuthorizeTransaction) {
             throw new ConflictHttpException('Payment not submitted.');
         }
 
-        $transactionDetails = $transactionApi->getTransactionDetails($payment->adn_transaction_id);
-
-        if (!in_array($transactionDetails['status'], ['authorizedPendingCapture', 'capturedPendingSettlement', 'FDSPendingReview'])) {
+        if (!in_array($this->getPaymentStatus(), ['authorizedPendingCapture', 'capturedPendingSettlement', 'FDSPendingReview'])) {
             throw new ConflictHttpException('Transaction must be pending settlement in order to be voided.  Refund transaction instead.');
         }
 
@@ -484,5 +482,21 @@ class TransactionProcessor
         $transaction->getAttribute('is_voidable');
 
         return $transaction;
+    }
+
+    /**
+     * Get the payment status of the transaction from Authorize.net
+     *
+     * @return string
+     * @throws \Exception
+     */
+    public function getPaymentStatus()
+    {
+        $payment = $this->transaction->last_payment;
+        $adnTransId = $payment->adn_transaction_id;
+        $transactionDetails = $this->transactionApi->getTransactionDetails($adnTransId);
+        $paymentStatus = $transactionDetails['status'];
+
+        return $paymentStatus;
     }
 }
