@@ -346,13 +346,7 @@ class AuthorizeCustomerManager
         $customerProfileIds = $this->customerApi->listCustomerProfileIds();
 
         foreach ($customerProfileIds as $customerProfileId) {
-            $this->deleteCustomerPaymentProfile($customerProfileId);
+            $this->customerApi->deleteCustomerProfile($customerProfileId);
         }
-
-        $this->users()->update([
-            'authorize_merchant_id' => null,
-            'authorize_id'          => null,
-            'authorize_payment_id'  => null,
-        ]);
     }
 }
