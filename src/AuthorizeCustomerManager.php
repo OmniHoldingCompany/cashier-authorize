@@ -225,22 +225,25 @@ class AuthorizeCustomerManager
      * Retrieve a specific payment profile for this user.
      *
      * @param integer $paymentProfileId
+     * @param bool    $unmasked
      *
      * @return AnetAPI\CustomerPaymentProfileMaskedType
      * @throws \Exception
      */
-    public function getPaymentProfile($paymentProfileId)
+    public function getPaymentProfile($paymentProfileId, $unmasked = false)
     {
-        return $this->customerApi->getPaymentProfile($this->getAuthorizeId(), $paymentProfileId);
+        return $this->customerApi->getPaymentProfile($this->getAuthorizeId(), $paymentProfileId, $unmasked);
     }
 
     /**
      * List all of this users payment methods.
      *
+     * @param bool $unmasked
+     *
      * @return array
      * @throws \Exception
      */
-    private function getCustomerPaymentProfiles()
+    private function getCustomerPaymentProfiles($unmasked = false)
     {
         $customerProfile = $this->getCustomerProfile();
 
@@ -253,7 +256,13 @@ class AuthorizeCustomerManager
         ];
 
         foreach ($paymentProfiles as $profile) {
-            $card        = $profile->getPayment()->getCreditCard();
+            if ($unmasked) {
+                $payment = $this->getPaymentProfile($profile->getCustomerPaymentProfileId(), true)->getPayment();
+            } else{
+                $payment = $profile->getPayment();
+            }
+
+            $card        = $payment->getCreditCard();
             $bankAccount = $profile->getPayment()->getBankAccount();
 
             $profileId = $profile->getCustomerPaymentProfileId();
@@ -285,12 +294,14 @@ class AuthorizeCustomerManager
     /**
      * List all of this users credit cards.
      *
+     * @param bool $unmasked
+     *
      * @return array
      * @throws \Exception
      */
-    public function getCustomerCreditCards()
+    public function getCustomerCreditCards($unmasked = false)
     {
-        $paymentProfiles = $this->getCustomerPaymentProfiles();
+        $paymentProfiles = $this->getCustomerPaymentProfiles($unmasked);
 
         return $paymentProfiles['credit_cards'];
     }
