@@ -72,6 +72,33 @@ class AuthorizeCustomerManager
     }
 
     /**
+     * Sync the user with their Authorize.net profile
+     */
+    public function syncProfile()
+    {
+        $user = $this->customer;
+
+        if ($user->authorize_merchant_id === $user->id) {
+            return;
+        }
+
+        // Update profile id to match new user id.
+        $this->updateCustomerProfile(['merchant_customer_id' => $user->id]);
+        $user->authorize_merchant_id = $user->id;
+
+        // See if we can set a default payment profile id
+        $creditCards = $this->getCustomerCreditCards(true);
+        $user->imported_payment_method_count = count($creditCards);
+
+        // Todo: Only count non-expired cards
+        if (count($creditCards) === 1) {
+            $user->authorize_payment_id = $creditCards[0]['id'];
+        }
+
+        $user->save();
+    }
+
+    /**
      * Get this users customer profile.
      *
      * @return AnetAPI\CustomerProfileMaskedType
