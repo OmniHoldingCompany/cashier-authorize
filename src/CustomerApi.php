@@ -289,13 +289,15 @@ class CustomerApi extends MerchantApi
      *
      * @param integer $customerProfileId
      * @param integer $paymentProfileId
+     * @param bool    $unmasked
      *
      * @return AnetAPI\CustomerPaymentProfileMaskedType
      * @throws \Exception
      */
-    public function getPaymentProfile($customerProfileId, $paymentProfileId)
+    public function getPaymentProfile($customerProfileId, $paymentProfileId, $unmasked = false)
     {
         $request = new AnetAPI\GetCustomerPaymentProfileRequest();
+        $request->setUnmaskExpirationDate($unmasked);
         $request->setMerchantAuthentication($this->merchantAuthentication);
         $request->setCustomerProfileId($customerProfileId);
         $request->setCustomerPaymentProfileId($paymentProfileId);
