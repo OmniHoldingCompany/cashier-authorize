@@ -4,6 +4,7 @@ namespace Laravel\CashierAuthorizeNet;
 
 use App\Organization;
 use App\User;
+use Illuminate\Support\Carbon;
 use net\authorize\api\contract\v1 as AnetAPI;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -88,9 +89,17 @@ class AuthorizeCustomerManager
 
         // See if we can set a default payment profile id
         $creditCards = $this->getCustomerCreditCards(true);
+
+        foreach ($creditCards as $key => $value) {
+            if (Carbon::createFromFormat('m/y', $value['expiration'])->lessThan(Carbon::now())) {
+                // Delete expired card from Authorize.Net:
+                //$this->deleteCustomerPaymentProfile($value['id']);
+                unset($creditCards[$key]);
+            }
+        }
+
         $user->imported_payment_method_count = count($creditCards);
 
-        // Todo: Only count non-expired cards
         if (count($creditCards) === 1) {
             $user->authorize_payment_id = $creditCards[0]['id'];
         }
