@@ -28,9 +28,6 @@ You will need to make migrations that include the following:
 ```php
 Schema::table('users', function ($table) {
     $table->string('authorize_id')->nullable();
-    $table->string('authorize_payment_id')->nullable();
-    $table->string('card_brand')->nullable();
-    $table->string('card_last_four')->nullable();
 });
 ```
 

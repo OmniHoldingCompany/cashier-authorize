@@ -200,19 +200,19 @@ class TransactionProcessor
     public function storePaymentProfile()
     {
         /** @var User $user */
-        $user        = $this->transaction->user;
-        $acm = app(AuthorizeCustomerManager::class);
+        $user = $this->transaction->user;
+        $acm  = app(AuthorizeCustomerManager::class);
         $acm->setMerchant($user->organization);
 
         switch ($this->getPaymentType($this->paymentData)) {
             case 'track_1':
                 $creditCard = self::splitTrackData($this->paymentData);
 
-                $paymentProfileId = $acm->addCreditCard($creditCard);
+                $paymentProfileId = $acm->addCreditCard($creditCard)->id;
                 break;
 
             case 'credit_card':
-                $paymentProfileId = $acm->addCreditCard($this->paymentData);
+                $paymentProfileId = $acm->addCreditCard($this->paymentData)->id;
                 break;
 
             case 'payment_profile':
@@ -266,7 +266,6 @@ class TransactionProcessor
                 'organization_id'        => $transaction->organization_id,
                 'adn_authorization_code' => $transactionDetails['authCode'],
                 'adn_transaction_id'     => $transactionDetails['transId'],
-                'last_four'              => $transactionDetails['lastFour'],
                 'amount'                 => $transactionDetails['amount'],
                 'type'                   => $transactionDetails['type'],
             ]);
@@ -396,19 +395,19 @@ class TransactionProcessor
         } else {
             $transactionApi     = $this->transactionApi;
             $payment            = $transaction->last_payment;
+
             $transactionDetails = $transactionApi->getTransactionDetails($payment->adn_transaction_id);
 
             if ($transactionDetails['status'] !== 'settledSuccessfully') {
                 throw new ConflictHttpException('Transaction must be settled before it can be refunded.  Void transaction instead.');
             }
 
-            $refundDetails = $transactionApi->refundTransaction($refundAmount, $payment->adn_transaction_id, $payment->last_four);
+            $refundDetails = $transactionApi->refundTransaction($refundAmount, $payment->adn_transaction_id, $transactionDetails['last_four']);
 
             $refund = $transaction->authorizeTransactions()->create([
                 'organization_id'        => $transaction->organization_id,
                 'adn_authorization_code' => $refundDetails['authCode'],
                 'adn_transaction_id'     => $refundDetails['transId'],
-                'last_four'              => $refundDetails['lastFour'],
                 'amount'                 => -$refundDetails['amount'],
                 'type'                   => $refundDetails['type'],
             ]);

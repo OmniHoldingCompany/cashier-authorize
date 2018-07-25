@@ -2,6 +2,7 @@
 
 namespace Laravel\CashierAuthorizeNet;
 
+use App\CreditCard;
 use App\Organization;
 use App\User;
 use Illuminate\Support\Carbon;
@@ -73,36 +74,38 @@ class AuthorizeCustomerManager
     }
 
     /**
-     * Sync the user with their Authorize.net profile
+     * Sync the user with their Authorize.Net profile
+     *
+     * @throws \Exception
      */
     public function syncProfile()
     {
         $user = $this->customer;
 
-        if ($user->authorize_merchant_id === $user->id) {
-            return;
-        }
-
-        // Update profile id to match new user id.
-        $this->updateCustomerProfile(['merchant_customer_id' => $user->id]);
-        $user->authorize_merchant_id = $user->id;
-
         // See if we can set a default payment profile id
         $creditCards = $this->getCustomerCreditCards(true);
 
-        foreach ($creditCards as $key => $value) {
-            if (Carbon::createFromFormat('m/y', $value['expiration'])->lessThan(Carbon::now())) {
-                // Delete expired card from Authorize.Net:
-                //$this->deleteCustomerPaymentProfile($value['id']);
-                unset($creditCards[$key]);
-            }
+        foreach ($creditCards as $creditCard) {
+            CreditCard::create([
+                'organization_id' => $user->organization_id,
+                'id'              => $creditCard['id'],
+                'user_id'         => $user->id,
+                'primary'         => false,
+                'number'          => $creditCard['number'],
+                'expires_at'      => Carbon::createFromFormat('m/y', $creditCard['expiration'])->endOfMonth(),
+                'type'            => $creditCard['type'],
+            ]);
         }
 
-        $user->imported_payment_method_count = count($creditCards);
+        $validCards = $user->creditCards()->valid();
 
-        if (count($creditCards) === 1) {
-            $user->authorize_payment_id = $creditCards[0]['id'];
+        if ($validCards->count() === 1) {
+            $validCards->first()->update(['primary' => true]);
         }
+
+        // Update profile id to match new user id.
+        $this->customerApi->updateCustomerProfile($user->authorize_merchant_id, ['merchant_customer_id' => $user->id]);
+        $user->authorize_merchant_id = $user->id;
 
         $user->save();
     }
@@ -218,10 +221,20 @@ class AuthorizeCustomerManager
             throw new \Exception('Failed to delete authorize profile');
         }
 
+        $this->customer->creditCards()->delete();
+
         $this->customer->authorize_id          = null;
         $this->customer->authorize_merchant_id = null;
-        $this->customer->authorize_payment_id  = null;
         $this->customer->save();
+    }
+
+    /**
+     * @return array
+     * @throws \Exception
+     */
+    public function getCustomerProfileIds()
+    {
+        return $this->customerApi->listCustomerProfileIds();
     }
 
 
@@ -235,26 +248,32 @@ class AuthorizeCustomerManager
      * @param array   $cardDetails
      * @param boolean $default
      *
-     * @return string
+     * @return CreditCard
      * @throws \Exception
      * @throws BadRequestHttpException
      */
     public function addCreditCard($cardDetails, $default = false)
     {
-        $paymentType = $this->customerApi::getCreditCardPaymentType($cardDetails);
-
-        $billTo = $this->customerApi::getBillingObject($cardDetails);
-
-        $paymentProfile = $this->customerApi::buildPaymentProfile($paymentType, $billTo);
+        $paymentType      = $this->customerApi::getCreditCardPaymentType($cardDetails);
+        $billTo           = $this->customerApi::getBillingObject($cardDetails);
+        $paymentProfile   = $this->customerApi::buildPaymentProfile($paymentType, $billTo);
 
         $paymentProfileId = $this->customerApi->addPaymentProfile($this->getAuthorizeId(), $paymentProfile);
 
-        if ($default || !$this->customer->authorize_payment_id) {
-            $this->customer->authorize_payment_id = $paymentProfileId;
-            $this->customer->save();
+        if ($default) {
+            $this->customer->creditCards()->update(['primary' => false]);
         }
 
-        return $paymentProfileId;
+        $creditCard = CreditCard::create([
+            'organization_id' => $this->customer->organization_id,
+            'id'              => $paymentProfileId,
+            'user_id'         => $this->customer->id,
+            'primary'         => is_null($this->customer->primary_credit_card),
+            'number'          => 'XXXX'.substr($cardDetails['number'], -4, 4),
+            'expires_at'      => Carbon::createFromFormat('m/y', $cardDetails['expiration'])->endOfMonth(),
+        ]);
+
+        return $creditCard;
     }
 
     /**
@@ -309,7 +328,6 @@ class AuthorizeCustomerManager
                     'number'     => $card->getCardNumber(),
                     'expiration' => $card->getExpirationDate(),
                     'type'       => $card->getCardType(),
-                    'primary'    => $this->customer->authorize_payment_id == $profileId,
                 ];
             } elseif (isset($bankAccount)) {
                 $paymentMethods['bank_accounts'][] = [
@@ -358,18 +376,20 @@ class AuthorizeCustomerManager
     /**
      * Delete a specific payment profile from this user.
      *
-     * @param int $customerPaymentProfileId
+     * @param Integer $paymentProfileId
      *
-     * @return bool
      * @throws \Exception
      */
-    public function deleteCustomerPaymentProfile($customerPaymentProfileId)
+    public function deleteCustomerPaymentProfile($paymentProfileId)
     {
-        if ($customerPaymentProfileId == $this->customer->authorize_payment_id) {
+        $creditCard = $this->customer->creditCards()->findOrFail($paymentProfileId);
+
+        if ($creditCard->primary) {
             throw new ConflictHttpException('Primary payment can not be removed.');
         }
 
-        return $this->customerApi->deletePaymentProfile($this->getAuthorizeId(), $customerPaymentProfileId);
+        $this->customerApi->deletePaymentProfile($this->getAuthorizeId(), $creditCard->id);
+        $creditCard->delete();
     }
 
     /**
@@ -384,5 +404,7 @@ class AuthorizeCustomerManager
         foreach ($customerProfileIds as $customerProfileId) {
             $this->customerApi->deleteCustomerProfile($customerProfileId);
         }
+
+        Organization::find(config('app.organization_id'))->creditCards()->delete();
     }
 }

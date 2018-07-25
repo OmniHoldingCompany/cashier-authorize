@@ -202,7 +202,7 @@ class SubscriptionBuilder
 
         $profile = new AnetAPI\CustomerProfileIdType();
         $profile->setCustomerProfileId($this->user->authorize_id);
-        $profile->setCustomerPaymentProfileId($this->user->authorize_payment_id);
+        $profile->setCustomerPaymentProfileId($this->user->primary_credit_card->id);
         $subscription->setProfile($profile);
 
         $requestor = new Requestor();
@@ -223,7 +223,7 @@ class SubscriptionBuilder
                 'name' => $this->name,
                 'authorize_id' => $response->getSubscriptionId(),
                 'authorize_plan' => $this->plan,
-                'authorize_payment_id' => $this->user->authorize_payment_id,
+                'authorize_payment_id' => $this->user->primary_credit_card->id,
                 'metadata' => json_encode([
                     'refId' => $requestor->refId
                 ]),

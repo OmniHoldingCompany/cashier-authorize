@@ -125,6 +125,7 @@ class MerchantApi
             'authorize_amount'  => TransactionApi::convertDollarsToPennies($details->getAuthAmount()),
             'settle_amount'     => TransactionApi::convertDollarsToPennies($details->getSettleAmount()),
             'submitted_at'      => $details->getSubmitTimeUTC(),
+            'last_four'         => $details->getPayment()->getCreditCard()->getCardNumber(),
         ];
     }
 }

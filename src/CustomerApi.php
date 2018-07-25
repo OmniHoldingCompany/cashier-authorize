@@ -344,7 +344,6 @@ class CustomerApi extends MerchantApi
      * @param integer $customerProfileId
      * @param integer $paymentProfileId
      *
-     * @return boolean
      * @throws \Exception
      */
     public function deletePaymentProfile($customerProfileId, $paymentProfileId)
@@ -385,8 +384,6 @@ class CustomerApi extends MerchantApi
                     break;
             }
         }
-
-        return true;
     }
 
 
