@@ -82,6 +82,11 @@ class AuthorizeCustomerManager
     {
         $user = $this->customer;
 
+        if ($user->id == $user->authorize_merchant_id || is_null($user->authorize_merchant_id)) {
+            // Don't update accounts that have already been updated or don't have an ADN customer profile
+            return;
+        }
+
         // See if we can set a default payment profile id
         $creditCards = $this->getCustomerCreditCards(true);
 
@@ -92,7 +97,7 @@ class AuthorizeCustomerManager
                 'user_id'         => $user->id,
                 'primary'         => false,
                 'number'          => $creditCard['number'],
-                'expires_at'      => Carbon::createFromFormat('m/y', $creditCard['expiration'])->endOfMonth(),
+                'expires_at'      => Carbon::createFromFormat('Y-m', $creditCard['expiration'])->endOfMonth(),
                 'type'            => $creditCard['type'],
             ]);
         }
@@ -405,6 +410,6 @@ class AuthorizeCustomerManager
             $this->customerApi->deleteCustomerProfile($customerProfileId);
         }
 
-        Organization::find(config('app.organization_id'))->creditCards()->delete();
+        CreditCard::whereOrganizationId(config('app.organization_id'))->delete();
     }
 }
