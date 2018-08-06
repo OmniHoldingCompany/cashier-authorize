@@ -74,48 +74,6 @@ class AuthorizeCustomerManager
     }
 
     /**
-     * Sync the user with their Authorize.Net profile
-     *
-     * @throws \Exception
-     */
-    public function syncProfile()
-    {
-        $user = $this->customer;
-
-        if ($user->id == $user->authorize_merchant_id || is_null($user->authorize_merchant_id)) {
-            // Don't update accounts that have already been updated or don't have an ADN customer profile
-            return;
-        }
-
-        // See if we can set a default payment profile id
-        $creditCards = $this->getCustomerCreditCards(true);
-
-        foreach ($creditCards as $creditCard) {
-            CreditCard::create([
-                'organization_id' => $user->organization_id,
-                'id'              => $creditCard['id'],
-                'user_id'         => $user->id,
-                'primary'         => false,
-                'number'          => $creditCard['number'],
-                'expires_at'      => Carbon::createFromFormat('Y-m', $creditCard['expiration'])->endOfMonth(),
-                'type'            => $creditCard['type'],
-            ]);
-        }
-
-        $validCards = $user->creditCards()->valid();
-
-        if ($validCards->count() === 1) {
-            $validCards->first()->update(['primary' => true]);
-        }
-
-        // Update profile id to match new user id.
-        $this->customerApi->updateCustomerProfile($user->authorize_merchant_id, ['merchant_customer_id' => $user->id]);
-        $user->authorize_merchant_id = $user->id;
-
-        $user->save();
-    }
-
-    /**
      * Get this users customer profile.
      *
      * @return AnetAPI\CustomerProfileMaskedType
