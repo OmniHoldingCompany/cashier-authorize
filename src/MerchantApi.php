@@ -28,11 +28,11 @@ class MerchantApi
      */
     protected $apiEndpoint;
 
-    public function __construct()
+    public function authenticate($loginId, $transactionKey)
     {
         $this->merchantAuthentication = new AnetAPI\MerchantAuthenticationType();
-        $this->merchantAuthentication->setName(getenv('ADN_API_LOGIN_ID'));
-        $this->merchantAuthentication->setTransactionKey(getenv('ADN_TRANSACTION_KEY'));
+        $this->merchantAuthentication->setName($loginId);
+        $this->merchantAuthentication->setTransactionKey($transactionKey);
 
         $this->apiEndpoint = getenv('APP_ENV') === 'production' ? ANetEnvironment::PRODUCTION : ANetEnvironment::SANDBOX;
     }

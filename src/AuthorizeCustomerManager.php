@@ -28,13 +28,8 @@ class AuthorizeCustomerManager
      */
     public function setMerchant(Organization $merchant)
     {
-        $loader = new \Dotenv\Loader('notreal');
-        $loader->setEnvironmentVariable('ADN_API_LOGIN_ID', $merchant->adn_api_login_id);
-        $loader->setEnvironmentVariable('ADN_TRANSACTION_KEY', $merchant->adn_transaction_key);
-        $loader->setEnvironmentVariable('ADN_SECRET_KEY', $merchant->adn_secret_key);
-
         $this->customerApi = resolve(CustomerApi::class);
-        $this->customerApi->__construct();  // Laravel wont call __construct on its own for some reason
+        $this->customerApi->authenticate($merchant->adn_api_login_id, $merchant->adn_transaction_key);
     }
 
     /*********************

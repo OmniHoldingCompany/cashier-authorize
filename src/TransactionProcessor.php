@@ -43,13 +43,8 @@ class TransactionProcessor
 
         $organization = $transaction->organization;
 
-        $loader = new \Dotenv\Loader('notreal');
-        $loader->setEnvironmentVariable('ADN_API_LOGIN_ID', $organization->adn_api_login_id);
-        $loader->setEnvironmentVariable('ADN_TRANSACTION_KEY', $organization->adn_transaction_key);
-        $loader->setEnvironmentVariable('ADN_SECRET_KEY', $organization->adn_secret_key);
-
         $this->transactionApi = resolve(TransactionApi::class);
-        $this->transactionApi->__construct();  // Laravel wont call __construct on its own for some reason
+        $this->transactionApi->authenticate($organization->adn_api_login_id, $organization->adn_transaction_key);
     }
 
     /**
