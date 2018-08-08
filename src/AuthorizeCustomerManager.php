@@ -362,7 +362,5 @@ class AuthorizeCustomerManager
         foreach ($customerProfileIds as $customerProfileId) {
             $this->customerApi->deleteCustomerProfile($customerProfileId);
         }
-
-        CreditCard::whereOrganizationId(config('app.organization_id'))->delete();
     }
 }
