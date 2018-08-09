@@ -111,11 +111,7 @@ class AuthorizeCustomerManager
                 'merchant_customer_id' => $this->getAuthorizeMerchantId()
             ]);
         } catch (NotFoundHttpException $e) {
-            if (strpos($this->customer->email, '+') !== false) {
-                $authorizeCustomerProfile = $this->getCustomerProfileByEmail();
-            } else {
-                $authorizeCustomerProfile = $this->initializeCustomerProfile($this->customer);
-            }
+            $authorizeCustomerProfile = $this->getCustomerProfileByEmail();
         }
 
         return $authorizeCustomerProfile;
@@ -149,6 +145,10 @@ class AuthorizeCustomerManager
     public function getCustomerProfileByEmail()
     {
         try {
+            if (strpos($this->customer->email, '+') !== false) {
+                throw new NotFoundHttpException('unaccepted email syntax');
+            }
+
             $authorizeCustomerProfile = $this->customerApi->getCustomerProfile([
                 'email' => $this->customer->email,
             ]);
