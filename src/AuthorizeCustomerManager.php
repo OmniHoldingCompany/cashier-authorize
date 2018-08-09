@@ -233,9 +233,36 @@ class AuthorizeCustomerManager
             'primary'         => is_null($this->customer->primary_credit_card),
             'number'          => 'XXXX'.substr($cardDetails['number'], -4, 4),
             'expires_at'      => Carbon::createFromFormat('m/y', $cardDetails['expiration'])->endOfMonth(),
+            'type'            => self::getCardType($cardDetails['number']),
         ]);
 
         return $creditCard;
+    }
+
+    /**
+     * @param $number
+     *
+     * @return null|string
+     */
+    private static function getCardType($number)
+    {
+        // Order is important to avoid false positives.
+        $patterns = [
+            'JCB'             => '/^(?:2131|1800|35)[0-9]{0,}$/',
+            'AmericanExpress' => '/^3[47][0-9]{0,}$/',
+            'DinersClub'      => '/^3(?:0[0-59]{1}|[689])[0-9]{0,}$/',
+            'Visa'            => '/^4[0-9]{0,}$/',
+            'MasterCard'      => '/^(5[1-5]|222[1-9]|22[3-9]|2[3-6]|27[01]|2720)[0-9]{0,}$/',
+            'Discover'        => '/^(6011|65|64[4-9]|62212[6-9]|6221[3-9]|622[2-8]|6229[01]|62292[0-5])[0-9]{0,}$/',
+        ];
+
+        foreach ($patterns as $type => $pattern) {
+            if (preg_match($pattern, $number)) {
+                return $type;
+            }
+        }
+
+        return null;
     }
 
     /**
