@@ -111,7 +111,11 @@ class AuthorizeCustomerManager
                 'merchant_customer_id' => $this->getAuthorizeMerchantId()
             ]);
         } catch (NotFoundHttpException $e) {
-            $authorizeCustomerProfile = $this->getCustomerProfileByEmail();
+            if (strpos($this->customer->email, '+') !== false) {
+                $authorizeCustomerProfile = $this->getCustomerProfileByEmail();
+            } else {
+                $authorizeCustomerProfile = $this->initializeCustomerProfile($this->customer);
+            }
         }
 
         return $authorizeCustomerProfile;
