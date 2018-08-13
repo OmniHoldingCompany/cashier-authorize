@@ -112,6 +112,10 @@ class TransactionProcessor
             throw $e;
         }
 
+        if (class_exists(OrderPlaced::class)) {
+            event(new OrderPlaced($this->transaction->user, $this->transaction));
+        }
+
         return $authorizeTransaction ?? null;
     }
 
@@ -277,10 +281,6 @@ class TransactionProcessor
 
         } catch (\Exception $e) {
             throw new PaymentException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        if (class_exists(OrderPlaced::class)) {
-            event(new OrderPlaced($transaction->user, $transaction));
         }
 
         return $authorizeTransaction;
