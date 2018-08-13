@@ -289,7 +289,7 @@ class TransactionProcessor
     {
         if (is_array($paymentData) && isset($paymentData['number']) && isset($paymentData['expiration']) && isset($paymentData['cvv'])) {
             return 'credit_card';
-        } elseif (preg_match('/^%B\d{0,19}\^[\w\s\/]{2,26}\^\d{7}\w*\?$/', $paymentData)) {
+        } elseif (preg_match('/^%?B\d{0,19}\^[\w\s\/]{2,26}\^\d{7}\w*\??$/', $paymentData)) {
             return 'track_1';
         } elseif (preg_match('/;\d{0,19}=\d{7}\w*\?/', $paymentData)) {
             return 'track_2';
@@ -315,7 +315,7 @@ class TransactionProcessor
                 $year  = substr($parts[2], 0, 2);
                 $month = substr($parts[2], 2, 2);
                 $creditCard = [
-                    'number'     => substr($parts[0], 2),
+                    'number'     => substr($parts[0], substr( $parts[0], 0, 1 ) === "%" ? 2 : 1),
                     'first_name' => trim($names[1]),
                     'last_name'  => trim($names[0]),
                     'expiration' => $month.'/'.$year,
