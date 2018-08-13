@@ -3,6 +3,7 @@
 namespace Laravel\CashierAuthorizeNet;
 
 use App\AuthorizeTransaction;
+use App\Events\OrderPlaced;
 use App\Exceptions\CheckoutRestrictionException;
 use App\Exceptions\PaymentException;
 use App\StoreCredit;
@@ -276,6 +277,10 @@ class TransactionProcessor
 
         } catch (\Exception $e) {
             throw new PaymentException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        if (class_exists(OrderPlaced::class)) {
+            event(new OrderPlaced($transaction->user, $transaction));
         }
 
         return $authorizeTransaction;
