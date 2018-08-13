@@ -250,6 +250,10 @@ class TransactionProcessor
                     $transactionDetails = $transactionApi->chargeCreditCard($transaction->amount_due, $this->paymentData);
                     break;
 
+                case null:
+                    throw new \Exception('Missing payment method');
+                    break;
+
                 case 'track_2':
                 default:
                     throw new \Exception('Unknown payment type');
