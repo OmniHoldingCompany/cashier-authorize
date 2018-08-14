@@ -272,6 +272,8 @@ class TransactionProcessor
                 'adn_transaction_id'     => $transactionDetails['transId'],
                 'amount'                 => $transactionDetails['amount'],
                 'type'                   => $transactionDetails['type'],
+                'last_four'              => $transactionDetails['lastFour'],
+                'payment_profile_id'     => $this->getPaymentType($this->paymentData) === 'payment_profile' ? $this->paymentData : null,
             ]);
 
             $transaction->payment_applied += $transactionDetails['amount'];
