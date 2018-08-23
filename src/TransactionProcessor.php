@@ -383,10 +383,10 @@ class TransactionProcessor
 
         DB::beginTransaction();
 
-        foreach ($transactionItems as $transactionItem) {
+        foreach ($transactionItems as $txItem) {
             /** @var TransactionItem $transactionItem */
-            $transactionItem = TransactionItem::whereId($transactionItem['id'])->whereTransactionId($transaction->id)->firstOrFail();
-            $refundAmount    += $transactionItem->return($transactionItem['quantity'], $transactionItem['restock']);
+            $transactionItem = TransactionItem::whereId($txItem['id'])->whereTransactionId($transaction->id)->firstOrFail();
+            $refundAmount    += $transactionItem->return($txItem['quantity'], $txItem['restock']);
         };
 
         if ($transaction->comp_reason) {
