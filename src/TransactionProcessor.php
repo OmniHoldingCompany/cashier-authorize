@@ -11,8 +11,6 @@ use App\Transaction;
 use App\TransactionItem;
 use App\User;
 use Illuminate\Support\Facades\DB;
-use Laravel\CashierAuthorizeNet\AuthorizeCustomerManager;
-use Laravel\CashierAuthorizeNet\TransactionApi;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
@@ -126,7 +124,6 @@ class TransactionProcessor
      *
      * @return void
      *
-     * @throws CheckoutRestrictionException
      * @throws \Exception
      */
     private function fulfill($fulfill = true)
@@ -386,10 +383,10 @@ class TransactionProcessor
         foreach ($transactionItems as $txItem) {
             /** @var TransactionItem $transactionItem */
             $transactionItem = TransactionItem::whereId($txItem['id'])->whereTransactionId($transaction->id)->firstOrFail();
-            $refundAmount    += $transactionItem->return($txItem['quantity'], $txItem['restock']);
+            $refundAmount    += $transactionItem->return($txItem['quantity'], $txItem['restock'], $txItem['force'] ?? null);
         };
 
-        if ($transaction->comp_reason) {
+        if ($transaction->comp_reason || $refundAmount === 0) {
             DB::commit();
             return null;
         }
