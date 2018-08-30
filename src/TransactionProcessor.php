@@ -297,7 +297,7 @@ class TransactionProcessor
             return 'track_1';
         } elseif (preg_match('/;\d{0,19}=\d{7}\w*\?/', $paymentData)) {
             return 'track_2';
-        } elseif (is_numeric($paymentData) && strlen($paymentData) === 10) {
+        } elseif (is_numeric($paymentData) && in_array(strlen($paymentData), [9,10])) {
             return 'payment_profile';
         }
 
