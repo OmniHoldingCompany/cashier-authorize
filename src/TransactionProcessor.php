@@ -475,13 +475,18 @@ class TransactionProcessor
     {
         $transaction    = $this->transaction;
         $transactionApi = $this->transactionApi;
-        $authData       = $transactionApi->getTransactionDetails($transaction->last_payment->adn_transaction_id);
+        $adnTransId     = $transaction->last_payment->adn_transaction_id ?? null;
 
-        $transaction->last_payment->update([
-            'voidable' => $authData['status'] !== 'settledSuccessfully',
-        ]);
+        if ($adnTransId) {
+            $authData = $transactionApi->getTransactionDetails($transaction->last_payment->adn_transaction_id);
 
-        $transaction->getAttribute('is_voidable');
+            $transaction->last_payment->update([
+                'voidable' => $authData['status'] !== 'settledSuccessfully',
+            ]);
+
+            $transaction->getAttribute('is_voidable');
+        }
+
 
         return $transaction;
     }
