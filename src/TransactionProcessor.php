@@ -376,7 +376,7 @@ class TransactionProcessor
         $transaction  = $this->transaction;
         $refundAmount = 0;
 
-        if ($transaction->status !== 'fulfilled') {
+        if (!in_array($transaction->status, ['fulfilled', 'partially_refunded'])) {
             throw new \Exception('Transaction must be fulfilled before being returned.');
         }
 
