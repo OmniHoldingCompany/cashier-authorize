@@ -285,6 +285,8 @@ class TransactionProcessor
             throw new PaymentException($e->getMessage(), $e->getCode(), $e);
         }
 
+        SyncTransaction::dispatch($transaction->fresh()->last_payment);
+
         return $authorizeTransaction;
     }
 
@@ -458,6 +460,8 @@ class TransactionProcessor
         };
 
         $transactionApi->voidTransaction($payment->adn_transaction_id);
+
+        SyncTransaction::dispatch($payment);
 
         $transaction->status = 'void';
         $transaction->save();

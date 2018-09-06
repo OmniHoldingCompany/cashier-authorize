@@ -45,11 +45,10 @@ class SyncTransaction implements ShouldQueue
 
         $transactionApi->authenticate($organization->adn_api_login_id, $organization->adn_transaction_key);
 
-        $authData = $transactionApi->getTransactionDetails($this->authTransaction->id);
+        $authData = $transactionApi->getTransactionDetails($this->authTransaction->adn_transaction_id);
 
         $this->authTransaction->update([
             'adn_status' => $authData['status'],
-            'last_four'  => $authData['last_four'],
         ]);
     }
 }

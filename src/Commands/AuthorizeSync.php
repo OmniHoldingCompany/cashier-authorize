@@ -32,7 +32,7 @@ class AuthorizeSync extends Command
     {
         $authTransactions = AuthorizeTransaction::where('updated_at', '>=', Carbon::now()->subDays(30))
             ->whereNotNull('adn_transaction_id')
-            ->all();
+            ->get();
 
         $authTransactions->each(function($authTransaction) {
             SyncTransaction::dispatch($authTransaction);
