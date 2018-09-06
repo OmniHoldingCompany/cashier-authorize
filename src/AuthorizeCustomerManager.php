@@ -2,10 +2,10 @@
 
 namespace Laravel\CashierAuthorizeNet;
 
-use App\CreditCard;
 use App\Organization;
 use App\User;
 use Illuminate\Support\Carbon;
+use Laravel\CashierAuthorizeNet\Models\CreditCard;
 use net\authorize\api\contract\v1 as AnetAPI;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
