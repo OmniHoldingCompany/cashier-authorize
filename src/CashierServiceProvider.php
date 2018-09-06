@@ -3,6 +3,7 @@
 namespace Laravel\CashierAuthorizeNet;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Database\Eloquent\Factory as EloquentFactory;
 
 class CashierServiceProvider extends ServiceProvider
 {
@@ -30,6 +31,17 @@ class CashierServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        //
+        $this->registerEloquentFactoriesFrom(__DIR__.'/../database/factories');
+    }
+
+    /**
+     * Register factories.
+     *
+     * @param  string  $path
+     * @return void
+     */
+    protected function registerEloquentFactoriesFrom($path)
+    {
+        $this->app->make(EloquentFactory::class)->load($path);
     }
 }

@@ -42,10 +42,15 @@
         },
     "autoload": {
         "psr-4": {
-            "Laravel\\CashierAuthorizeNet\\": "src/"
+            "Laravel\\CashierAuthorizeNet\\": "src"
         }
     },
     "extra": {
+        "laravel": {
+            "providers": [
+                "Laravel\\CashierAuthorizeNet\\CashierServiceProvider"
+            ]
+        },
         "branch-alias": {
             "dev-master": "2.0-dev"
         }
