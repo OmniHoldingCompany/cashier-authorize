@@ -2,7 +2,6 @@
 
 namespace Laravel\CashierAuthorizeNet;
 
-use App\AuthorizeTransaction;
 use App\Events\OrderPlaced;
 use App\Exceptions\CheckoutRestrictionException;
 use App\Exceptions\PaymentException;
@@ -11,6 +10,7 @@ use App\Transaction;
 use App\TransactionItem;
 use App\User;
 use Illuminate\Support\Facades\DB;
+use Laravel\CashierAuthorizeNet\Models\AuthorizeTransaction;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
