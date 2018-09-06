@@ -11,6 +11,7 @@ use App\TransactionItem;
 use App\User;
 use Illuminate\Support\Facades\DB;
 use Laravel\CashierAuthorizeNet\Models\AuthorizeTransaction;
+use Laravel\CashierAuthorizeNet\Jobs\SyncTransaction;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
@@ -401,13 +402,15 @@ class TransactionProcessor
             $transactionApi     = $this->transactionApi;
             $payment            = $transaction->last_payment;
 
-            $transactionDetails = $transactionApi->getTransactionDetails($payment->adn_transaction_id);
+            SyncTransaction::dispatch($payment)->onConnection('sync');
 
-            if ($transactionDetails['status'] !== 'settledSuccessfully') {
+            $payment->refresh();
+
+            if (!$payment->refundable) {
                 throw new ConflictHttpException('Transaction must be settled before it can be refunded.  Void transaction instead.');
             }
 
-            $refundDetails = $transactionApi->refundTransaction($refundAmount, $payment->adn_transaction_id, $transactionDetails['last_four']);
+            $refundDetails = $transactionApi->refundTransaction($refundAmount, $payment->adn_transaction_id, $payment['last_four']);
 
             $refund = $transaction->authorizeTransactions()->create([
                 'organization_id'        => $transaction->organization_id,
@@ -440,7 +443,11 @@ class TransactionProcessor
             throw new ConflictHttpException('Payment not submitted.');
         }
 
-        if (!in_array($this->getPaymentStatus(), ['authorizedPendingCapture', 'capturedPendingSettlement', 'FDSPendingReview'])) {
+        dispatch_now(new SyncTransaction($payment));
+
+        $payment->refresh();
+
+        if (!$payment->voidable) {
             throw new ConflictHttpException('Transaction must be pending settlement in order to be voided.  Refund transaction instead.');
         }
 
@@ -465,47 +472,5 @@ class TransactionProcessor
             'total'       => 0,
             'amount_due'  => 0,
         ]);
-    }
-
-    /**
-     * Updates the voidable status on the transaction's last payment.
-     *
-     * @return \App\Transaction
-     * @throws \Exception
-     */
-    public function updateVoidableStatus()
-    {
-        $transaction    = $this->transaction;
-        $transactionApi = $this->transactionApi;
-        $adnTransId     = $transaction->last_payment->adn_transaction_id ?? null;
-
-        if ($adnTransId) {
-            $authData = $transactionApi->getTransactionDetails($transaction->last_payment->adn_transaction_id);
-
-            $transaction->last_payment->update([
-                'voidable' => $authData['status'] !== 'settledSuccessfully',
-            ]);
-
-            $transaction->getAttribute('is_voidable');
-        }
-
-
-        return $transaction;
-    }
-
-    /**
-     * Get the payment status of the transaction from Authorize.net
-     *
-     * @return string
-     * @throws \Exception
-     */
-    public function getPaymentStatus()
-    {
-        $payment = $this->transaction->last_payment;
-        $adnTransId = $payment->adn_transaction_id;
-        $transactionDetails = $this->transactionApi->getTransactionDetails($adnTransId);
-        $paymentStatus = $transactionDetails['status'];
-
-        return $paymentStatus;
     }
 }
