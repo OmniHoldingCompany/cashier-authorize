@@ -285,7 +285,7 @@ class TransactionProcessor
             throw new PaymentException($e->getMessage(), $e->getCode(), $e);
         }
 
-        SyncTransaction::dispatch($transaction->fresh()->last_payment);
+        SyncTransaction::dispatch($authorizeTransaction);
 
         return $authorizeTransaction;
     }
