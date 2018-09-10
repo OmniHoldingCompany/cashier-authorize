@@ -10,6 +10,7 @@ use App\Transaction;
 use App\TransactionItem;
 use App\User;
 use Illuminate\Support\Facades\DB;
+use Laravel\CashierAuthorizeNet\Events\TransactionVoided;
 use Laravel\CashierAuthorizeNet\Models\AuthorizeTransaction;
 use Laravel\CashierAuthorizeNet\Jobs\SyncTransaction;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -465,6 +466,8 @@ class TransactionProcessor
 
         $transaction->status = 'void';
         $transaction->save();
+
+        event(new TransactionVoided($payment));
     }
 
     public function comp($reason)
