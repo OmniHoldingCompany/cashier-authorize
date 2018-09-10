@@ -10,6 +10,7 @@ use App\Transaction;
 use App\TransactionItem;
 use App\User;
 use Illuminate\Support\Facades\DB;
+use Laravel\CashierAuthorizeNet\Events\RefundIssued;
 use Laravel\CashierAuthorizeNet\Events\TransactionVoided;
 use Laravel\CashierAuthorizeNet\Models\AuthorizeTransaction;
 use Laravel\CashierAuthorizeNet\Jobs\SyncTransaction;
@@ -425,6 +426,8 @@ class TransactionProcessor
         }
 
         DB::commit();
+
+        event(new RefundIssued($refund, $transactionItems));
 
         return $refund;
     }

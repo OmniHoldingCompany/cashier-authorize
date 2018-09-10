@@ -9,21 +9,25 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Broadcasting\InteractsWithSockets;
 
-class TransactionVoided
+class RefundIssued
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     /** @var AuthorizeTransaction */
     public $authorizeTransaction;
 
+    /** @var array */
+    public $itemsReturned;
+
     /**
      * Create a new event instance.
      *
      * @param  AuthorizeTransaction $authorizeTransaction
      */
-    public function __construct(AuthorizeTransaction $authorizeTransaction)
+    public function __construct(AuthorizeTransaction $authorizeTransaction, $itemsReturned)
     {
         $this->authorizeTransaction = $authorizeTransaction;
+        $this->itemsReturned        = $itemsReturned;
     }
 
     /**
