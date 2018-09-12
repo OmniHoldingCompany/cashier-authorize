@@ -422,7 +422,7 @@ class TransactionProcessor
 
         DB::commit();
 
-        event(new RefundIssued($refund, $transactionItems));
+        event(new RefundIssued($refund));
 
         return $refund;
     }
