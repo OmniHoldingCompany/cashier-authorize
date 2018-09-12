@@ -203,7 +203,6 @@ class TransactionApi extends MerchantApi
      *
      * @param integer $transactionId
      *
-     * @return array
      * @throws \Exception
      */
     public function voidTransaction($transactionId)
@@ -213,15 +212,7 @@ class TransactionApi extends MerchantApi
 
         $transactionRequest->setRefTransId($transactionId);
 
-        $transactionResponse = $this->buildAndExecuteRequest($transactionRequest);
-
-        return [
-            'authCode' => $transactionResponse->getAuthCode(),
-            'transId'  => $transactionResponse->getTransId(),
-            'lastFour' => substr($transactionResponse->getAccountNumber(), -4),
-            'amount'   => $transactionRequest->getAmount(),
-            'type'     => $transactionRequest->getTransactionType(),
-        ];
+        $this->buildAndExecuteRequest($transactionRequest);
     }
 
     /********************
