@@ -6,6 +6,7 @@ use App\AuthorizeTransaction;
 use App\Events\OrderPlaced;
 use App\Exceptions\CheckoutRestrictionException;
 use App\Exceptions\PaymentException;
+use App\ReturnedTransactionItem;
 use App\StoreCredit;
 use App\Transaction;
 use App\TransactionItem;
@@ -366,17 +367,16 @@ class TransactionProcessor
      * or for store credit. If the amount is zero, no refund is
      * applied.
      *
-     * @param array   $transactionItems
+     * @param array   $returnedItems
      * @param boolean $applyAsStoreCredit
      *
      * @throws \Exception
      *
      * @return StoreCredit|AuthorizeTransaction
      */
-    public function returnItems($transactionItems, $applyAsStoreCredit = false)
+    public function returnItems($returnedItems, $applyAsStoreCredit = false)
     {
         $transaction  = $this->transaction;
-        $refundAmount = 0;
 
         if (!in_array($transaction->status, ['fulfilled', 'partially_refunded'])) {
             throw new \Exception('Transaction must be fulfilled before being returned.');
@@ -384,11 +384,23 @@ class TransactionProcessor
 
         DB::beginTransaction();
 
-        foreach ($transactionItems as $txItem) {
+        $returnedTransactionItems = collect();
+
+        foreach ($returnedItems as $returnedItem) {
             /** @var TransactionItem $transactionItem */
-            $transactionItem = TransactionItem::whereId($txItem['id'])->whereTransactionId($transaction->id)->firstOrFail();
-            $refundAmount    += $transactionItem->return($txItem['quantity'], $txItem['restock'], $txItem['force'] ?? null);
+            $transactionItem = TransactionItem::where('id', $returnedItem['id'])
+                ->where('transaction_id', $transaction->id)
+                ->firstOrFail();
+
+            $returnedTransactionItems->push(ReturnedTransactionItem::create([
+                'organization_id'     => $transaction->organization_id,
+                'transaction_item_id' => $transactionItem->id,
+                'quantity'            => $returnedItem['quantity'],
+                'amount'              => $transactionItem->return($returnedItem['quantity'], $returnedItem['restock'], $returnedItem['force'] ?? null),
+            ]));
         };
+
+        $refundAmount = $returnedTransactionItems->sum('amount');
 
         if ($transaction->comp_reason || $refundAmount === 0) {
             DB::commit();
@@ -398,6 +410,7 @@ class TransactionProcessor
         $transaction->increment('refund', $refundAmount);
 
         if ($applyAsStoreCredit) {
+            /** @var StoreCredit $refund */
             $refund = $transaction->user->addStoreCredit($refundAmount, $transaction);
         } else {
             $transactionApi     = $this->transactionApi;
@@ -411,6 +424,7 @@ class TransactionProcessor
 
             $refundDetails = $transactionApi->refundTransaction($refundAmount, $payment->adn_transaction_id, $transactionDetails['last_four']);
 
+            /** @var AuthorizeTransaction $refund */
             $refund = $transaction->authorizeTransactions()->create([
                 'organization_id'        => $transaction->organization_id,
                 'adn_authorization_code' => $refundDetails['authCode'],
@@ -419,6 +433,14 @@ class TransactionProcessor
                 'type'                   => $refundDetails['type'],
             ]);
         }
+
+        $returnedTransactionItems->each(function ($returnedTransactionItem) use ($refund) {
+            /** @var ReturnedTransactionItem $returnedTransactionItem */
+            $returnedTransactionItem->update([
+                'refundable_type' => get_class($refund),
+                'refundable_id'   => $refund->id,
+            ]);
+        });
 
         DB::commit();
 

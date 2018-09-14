@@ -3,6 +3,7 @@
 namespace Laravel\CashierAuthorizeNet\Models;
 
 use App\Organization;
+use App\ReturnedTransactionItem;
 use App\Transaction;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations;
@@ -123,6 +124,16 @@ class AuthorizeTransaction extends Model
     public function creditCard()
     {
         return $this->belongsTo(CreditCard::class);
+    }
+
+    /**
+     * Get the returned transaction items for this refund.
+     *
+     * @return Relations\MorphMany
+     */
+    public function returnedTransactionItems()
+    {
+        return $this->morphMany(ReturnedTransactionItem::class, 'refundable');
     }
 
     /**
