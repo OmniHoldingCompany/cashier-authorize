@@ -64,7 +64,6 @@ class TransactionProcessor
      * Apply store credit, fulfill transaction and charge payment method
      *
      * @param string $note    Save a note to the transaction
-     * @param bool   $fulfill Whether or not to fulfill the transaction
      * @param bool   $bypassGuards
      *
      * @return AuthorizeTransaction
@@ -72,7 +71,7 @@ class TransactionProcessor
      * @throws CheckoutRestrictionException
      * @throws \Exception
      */
-    public function checkout($note = null, $fulfill = true, $bypassGuards = false)
+    public function checkout($note = null, $bypassGuards = false)
     {
         if (!in_array($this->transaction->status, ['new', 'failed'])) {
             throw new CheckoutRestrictionException('This transaction has already been paid for or voided');
@@ -88,7 +87,7 @@ class TransactionProcessor
 
             $this->applyStoreCredit();
 
-            $this->fulfill($fulfill, $bypassGuards);
+            $this->fulfill($bypassGuards);
 
             if ($this->storeProfile) {
                 $this->storePaymentProfile();
@@ -125,20 +124,19 @@ class TransactionProcessor
     /**
      * Loop through transaction items to fulfill and mark transaction as fulfilled.
      *
-     * @param bool $fulfill
      * @param bool $bypassGuards
      *
      * @return void
      *
      * @throws \Exception
      */
-    private function fulfill($fulfill = true, $bypassGuards = false)
+    private function fulfill($bypassGuards = false)
     {
         /** @var TransactionItem $transactionItem */
         foreach ($this->transaction->transactionItems as $transactionItem) {
             // set this here so we don't have to query to load it in uses below
             $transactionItem->setRelation('transaction', $this->transaction);
-            $transactionItem->fulfill($fulfill, $bypassGuards);
+            $transactionItem->fulfill($bypassGuards);
         }
 
         $this->transaction->status = 'fulfilled';
