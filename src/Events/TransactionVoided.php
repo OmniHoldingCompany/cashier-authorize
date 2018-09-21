@@ -2,12 +2,12 @@
 
 namespace Laravel\CashierAuthorizeNet\Events;
 
-use App\AuthorizeTransaction;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Laravel\CashierAuthorizeNet\Models\AuthorizeTransaction;
 
 class TransactionVoided
 {
