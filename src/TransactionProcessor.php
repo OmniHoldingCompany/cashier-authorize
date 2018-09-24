@@ -78,12 +78,15 @@ class TransactionProcessor
             throw new CheckoutRestrictionException('This transaction has already been paid for or voided');
         }
 
+        $this->transaction->update([
+            'status' => 'pending',
+        ]);
+
         try {
             DB::beginTransaction();
 
             $this->transaction->update([
-                'status' => 'pending',
-                'note'   => $note ?? $this->transaction->note,
+                'note' => $note ?? $this->transaction->note,
             ]);
 
             $this->applyStoreCredit();
@@ -106,12 +109,9 @@ class TransactionProcessor
             }
 
             DB::commit();
-        } catch (PaymentException $e) {
-            DB::rollback();
-            $this->logChargeFailure($e);
-            throw $e;
         } catch (\Exception $e) {
             DB::rollback();
+            $this->logChargeFailure($e);
             throw $e;
         }
 
