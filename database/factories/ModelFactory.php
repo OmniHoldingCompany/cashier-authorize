@@ -31,7 +31,7 @@ $factory->define(CreditCard::class, function (Faker\Generator $faker, $attribute
         'id'              => $faker->unique()->numerify('#########'),
         'user_id'         => $user->id,
         'number'          => 'XXXX'.$faker->numerify('####'),
-        'expires_at'      => Carbon::tomorrow(),
+        'expires_at'      => Carbon::now()->addYears(2),
         'type'            => $faker->randomElement(['Visa', 'Mastercard', 'Discover', 'AmericanExpress', 'DinersClub', 'JCB']),
     ];
 });
