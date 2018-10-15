@@ -295,7 +295,7 @@ class TransactionApi extends MerchantApi
                     // Transaction error caught below
                     break;
                 default:
-                    throw new \Exception($errorMessages[0]->getText());
+                    throw new \Exception($errorMessages[0]->getText() . '(' . $errorMessages[0]->getCode() . ')');
                     break;
             }
         }
@@ -308,7 +308,6 @@ class TransactionApi extends MerchantApi
 
         switch ($transactionResponse->getResponseCode()) {
             case "1": // Success
-            case "4": // The code returned from the processor indicating that the card used needs to be picked up.
                 break;
 
             case "2": // General decline, no further details.
@@ -321,10 +320,11 @@ class TransactionApi extends MerchantApi
                 //   For JCB call : (800) 522-9345
                 //   For Visa/Mastercard call: (800) 228-1122
                 // Once an authorization is issued, you can then submit the transaction through your Virtual Terminal as a Capture Only transaction.
+            case "4": // The code returned from the processor indicating that the card used needs to be picked up.
             case "6": // The credit card number is invalid.
             case "11": // A transaction with identical amount and credit card information was submitted within the previous two minutes.
                 $transactionErrors = $transactionResponse->getErrors();
-                throw new BadRequestHttpException($transactionErrors[0]->getErrorText());
+                throw new BadRequestHttpException($transactionErrors[0]->getErrorText() . '(' . $transactionResponse->getResponseCode() . ')');
                 break;
 
             default:
