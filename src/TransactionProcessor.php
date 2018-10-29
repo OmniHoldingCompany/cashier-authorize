@@ -65,13 +65,14 @@ class TransactionProcessor
      *
      * @param string $note    Save a note to the transaction
      * @param bool   $bypassGuards
+     * @param bool   $allowStoreCredit
      *
      * @return AuthorizeTransaction
      *
      * @throws CheckoutRestrictionException
      * @throws \Exception
      */
-    public function checkout($note = null, $bypassGuards = false)
+    public function checkout($note = null, $bypassGuards = false, $allowStoreCredit = true)
     {
         if (!in_array($this->transaction->status, ['new', 'failed'])) {
             throw new CheckoutRestrictionException('This transaction has already been paid for or voided');
@@ -88,7 +89,9 @@ class TransactionProcessor
                 'note' => $note ?? $this->transaction->note,
             ]);
 
-            $this->applyStoreCredit();
+            if ($allowStoreCredit) {
+                $this->applyStoreCredit();
+            }
 
             $this->fulfill($bypassGuards);
 
