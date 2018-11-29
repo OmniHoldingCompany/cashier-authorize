@@ -248,15 +248,15 @@ class TransactionProcessor
 
             switch ($this->getPaymentType($this->paymentData)) {
                 case 'payment_profile':
-                    $transactionDetails = $transactionApi->chargeProfile($transaction->amount_due, $transaction->user->authorize_id, $this->paymentData);
+                    $transactionDetails = $transactionApi->chargeProfile($transaction->amount_due, $transaction->user->authorize_id, $this->paymentData, $this->transaction->id);
                     break;
 
                 case 'track_1':
-                    $transactionDetails = $transactionApi->chargeTrack($transaction->amount_due, $this->paymentData);
+                    $transactionDetails = $transactionApi->chargeTrack($transaction->amount_due, $this->paymentData, $this->transaction->id);
                     break;
 
                 case 'credit_card':
-                    $transactionDetails = $transactionApi->chargeCreditCard($transaction->amount_due, $this->paymentData);
+                    $transactionDetails = $transactionApi->chargeCreditCard($transaction->amount_due, $this->paymentData, $this->transaction->id);
                     break;
 
                 case null:
